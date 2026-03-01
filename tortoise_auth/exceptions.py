@@ -43,3 +43,31 @@ class EventError(TortoiseAuthError):
             f"Handler {handler_name!r} for event {event_name!r} "
             f"raised {type(original).__name__}: {original}"
         )
+
+
+class TokenError(TortoiseAuthError):
+    """Raised when a token operation fails."""
+
+
+class TokenExpiredError(TokenError):
+    """Raised when a token has expired."""
+
+
+class TokenInvalidError(TokenError):
+    """Raised when a token is structurally invalid or cannot be decoded."""
+
+
+class TokenRevokedError(TokenError):
+    """Raised when a revoked token is presented."""
+
+
+class SigningError(TortoiseAuthError):
+    """Raised when token signing or verification fails."""
+
+
+class SignatureExpiredError(SigningError):
+    """Raised when a signed token has expired."""
+
+
+class BadSignatureError(SigningError):
+    """Raised when a signed token has an invalid signature."""

@@ -7,7 +7,6 @@ import hashlib
 import hmac
 import os
 
-
 _DEFAULT_ITERATIONS = 600_000
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from tortoise_auth.exceptions import ConfigurationError
 from tortoise_auth.hashers import default_password_hash
 from tortoise_auth.validators.common import CommonPasswordValidator
 from tortoise_auth.validators.length import MinimumLengthValidator
@@ -41,6 +42,37 @@ class AuthConfig:
 
     # Validators
     password_validators: list[PasswordValidator] = field(default_factory=_default_validators)
+
+    # JWT settings
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_public_key: str = ""
+    jwt_access_token_lifetime: int = 900  # 15 minutes
+    jwt_refresh_token_lifetime: int = 604_800  # 7 days
+    jwt_issuer: str = ""
+    jwt_audience: str = ""
+
+    # Token backend
+    token_backend: str = "jwt"  # "jwt" or "database"
+
+    # Database tokens
+    db_token_length: int = 64
+
+    # Signing (HMAC)
+    signing_secret: str = ""
+    signing_token_lifetime: int = 86_400  # 24 hours
+
+    def validate(self) -> None:
+        """Validate config. Raises ConfigurationError."""
+        if self.token_backend == "jwt" and not self.jwt_secret:
+            raise ConfigurationError("jwt_secret required for JWT backend")
+        if self.jwt_algorithm.startswith("RS") and not self.jwt_public_key:
+            raise ConfigurationError("jwt_public_key required for RS256")
+
+    @property
+    def effective_signing_secret(self) -> str:
+        """Return signing_secret if set, otherwise fall back to jwt_secret."""
+        return self.signing_secret or self.jwt_secret
 
     def get_password_hash(self) -> PasswordHash:
         """Build a PasswordHash instance from current config."""

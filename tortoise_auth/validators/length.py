@@ -14,7 +14,8 @@ class MinimumLengthValidator:
     def validate(self, password: str, user: Any = None) -> None:
         if len(password) < self.min_length:
             raise ValueError(
-                f"This password is too short. It must contain at least {self.min_length} characters."
+                f"This password is too short. "
+                f"It must contain at least {self.min_length} characters."
             )
 
     def get_help_text(self) -> str:

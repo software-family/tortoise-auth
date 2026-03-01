@@ -4,7 +4,6 @@ import hmac
 import secrets
 import string
 
-
 UNUSABLE_PASSWORD_PREFIX = "!"
 UNUSABLE_PASSWORD_SUFFIX_LENGTH = 40
 

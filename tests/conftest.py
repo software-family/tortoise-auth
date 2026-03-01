@@ -7,7 +7,7 @@ async def init_db():
     """Initialize an in-memory SQLite database for each test."""
     await Tortoise.init(
         db_url="sqlite://:memory:",
-        modules={"models": ["tests.models"]},
+        modules={"models": ["tests.models", "tortoise_auth.models.tokens"]},
     )
     await Tortoise.generate_schemas()
     yield

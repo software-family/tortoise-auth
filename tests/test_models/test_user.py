@@ -2,11 +2,10 @@
 
 import pytest
 
+from tests.models import FullUser, MinimalUser
 from tortoise_auth.events import emitter
 from tortoise_auth.hashers.argon2 import Argon2Hasher
 from tortoise_auth.hashers.bcrypt import default_hasher as bcrypt_default
-
-from tests.models import FullUser, MinimalUser
 
 
 @pytest.fixture(autouse=True)
