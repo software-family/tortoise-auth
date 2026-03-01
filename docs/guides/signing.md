@@ -196,25 +196,15 @@ secret automatically.
 
 ### effective_signing_secret
 
-The resolution order is:
-
-1. **`signing_secret`** -- if set, this value is used.
-2. **`jwt_secret`** -- used as a fallback when `signing_secret` is empty.
+Set `signing_secret` in your `AuthConfig`:
 
 ```python
 from tortoise_auth import AuthConfig, configure
 
 configure(AuthConfig(
-    jwt_secret="my-jwt-key",
-    signing_secret="dedicated-signing-key",  # optional
+    signing_secret="dedicated-signing-key",
 ))
 ```
-
-!!! tip "Use a dedicated signing secret"
-    While falling back to `jwt_secret` is convenient for small projects, production
-    deployments should set a separate `signing_secret`. This limits the blast radius
-    if either key is compromised and lets you rotate signing keys independently of
-    your JWT infrastructure.
 
 ### signing_token_lifetime
 

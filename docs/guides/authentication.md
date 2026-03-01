@@ -26,7 +26,7 @@ from tortoise_auth import AuthConfig, AuthService, configure
 
 configure(AuthConfig(
     user_model="models.User",
-    jwt_secret="your-secret-key",
+    signing_secret="your-secret-key",
 ))
 
 # No arguments needed -- uses the global config
@@ -43,8 +43,7 @@ from tortoise_auth import AuthConfig, AuthService
 
 config = AuthConfig(
     user_model="models.User",
-    jwt_secret="tenant-specific-secret",
-    jwt_access_token_lifetime=600,  # 10 minutes
+    access_token_lifetime=600,  # 10 minutes
 )
 auth = AuthService(config=config)
 ```
@@ -135,12 +134,9 @@ result = await auth.login(
 )
 ```
 
-With the JWT backend, these claims are stored under the `"extra"` key in the
-token payload and are available on `TokenPayload.extra` after verification.
-
 !!! note
-    Extra claims are included only in the **access token**. The refresh token
-    does not carry extra claims.
+    Extra claims are currently only supported by custom token backends.
+    The built-in database backend does not embed extra claims in tokens.
 
 ---
 
@@ -262,11 +258,7 @@ password.
 await auth.logout_all(user_id=str(user.pk))
 ```
 
-!!! warning "JWT backend limitation"
-    With the default `JWTBackend`, `revoke_all_for_user()` is a **no-op**
-    because the JWT backend only tracks individually revoked token JTIs in
-    memory. Use the `DatabaseTokenBackend` if you need reliable
-    revoke-all behavior.
+All tokens for the user are immediately invalidated in the database.
 
 ---
 

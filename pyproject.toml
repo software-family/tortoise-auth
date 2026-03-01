@@ -5,7 +5,7 @@ description = "Async authentication and user management for Tortoise ORM. Framew
 requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Elie" }]
-keywords = ["tortoise-orm", "authentication", "auth", "jwt", "async", "user-management", "totp", "2fa", "api-keys"]
+keywords = ["tortoise-orm", "authentication", "auth", "async", "user-management", "totp", "2fa", "api-keys"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: AsyncIO",
@@ -22,6 +22,7 @@ dependencies = [
     "tortoise-orm>=0.21",
     "pwdlib[argon2,bcrypt]>=0.2",
     "PyJWT>=2.8",
+
     "pyotp>=2.9",
     "qrcode[pil]>=7.4",
 ]
@@ -101,4 +102,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "qrcode.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "jwt.*"
 ignore_missing_imports = true

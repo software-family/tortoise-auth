@@ -94,19 +94,18 @@ minimum you need two values:
 - **`user_model`** -- the Tortoise registry path to your concrete user model, in the format
   `"<app_label>.<ModelName>"`. The app label corresponds to the key you used in the
   `modules` dict during `Tortoise.init`.
-- **`jwt_secret`** -- the secret key used to sign and verify JWT tokens.
 
 ```python
 from tortoise_auth import AuthConfig, configure
 
 configure(AuthConfig(
     user_model="models.User",
-    jwt_secret="change-me-in-production",
+    signing_secret="change-me-in-production",
 ))
 ```
 
 !!! warning
-    Never hard-code secrets in production code. Load `jwt_secret` from an environment
+    Never hard-code secrets in production code. Load `signing_secret` from an environment
     variable or a secrets manager:
 
     ```python
@@ -114,7 +113,7 @@ configure(AuthConfig(
 
     configure(AuthConfig(
         user_model="models.User",
-        jwt_secret=os.environ["JWT_SECRET"],
+        signing_secret=os.environ["SIGNING_SECRET"],
     ))
     ```
 
@@ -160,8 +159,8 @@ from tortoise_auth import AuthService
 auth = AuthService()
 result = await auth.login("alice@example.com", "SecurePass123!")
 
-print(result.access_token)   # JWT access token (valid for 15 minutes)
-print(result.refresh_token)  # JWT refresh token (valid for 7 days)
+print(result.access_token)   # access token (valid for 15 minutes)
+print(result.refresh_token)  # refresh token (valid for 7 days)
 print(result.user.email)     # alice@example.com
 ```
 
@@ -199,7 +198,7 @@ print(user.email)  # alice@example.com
 
 This is the method you call on every incoming request that requires authentication. It:
 
-1. Decodes and validates the JWT (signature, expiration, token type).
+1. Validates the token (looks up by hash, checks expiration and revocation).
 2. Looks up the user by the `sub` (subject) claim in the token payload.
 3. Confirms the user is still active.
 
@@ -220,8 +219,8 @@ obtain a **new pair** of tokens without asking the user for their password again
 
 ```python
 new_tokens = await auth.refresh(result.refresh_token)
-print(new_tokens.access_token)   # new JWT access token
-print(new_tokens.refresh_token)  # new JWT refresh token
+print(new_tokens.access_token)   # new access token
+print(new_tokens.refresh_token)  # new refresh token
 ```
 
 `refresh()` returns a `TokenPair` (not an `AuthResult` -- there is no user lookup). It also
@@ -253,10 +252,7 @@ After logout, any call to `authenticate()` with the revoked token will raise
     await auth.logout_all(str(user.pk))
     ```
 
-    Note that `logout_all()` is fully effective with the **database** token backend. With
-    the default **JWT** backend, revocation relies on an in-memory blacklist that does not
-    persist across restarts. See the [Token Backends](../guides/token-backends.md) guide for
-    details.
+    All tokens for the user are immediately invalidated in the database.
 
 ---
 
@@ -288,13 +284,16 @@ class User(AbstractUser):
 async def main() -> None:
     await Tortoise.init(
         db_url="sqlite://:memory:",
-        modules={"models": ["__main__"]},
+        modules={
+            "models": ["__main__"],
+            "tortoise_auth": ["tortoise_auth.models"],
+        },
     )
     await Tortoise.generate_schemas()
 
     configure(AuthConfig(
         user_model="models.User",
-        jwt_secret="change-me-in-production",
+        signing_secret="change-me-in-production",
     ))
 
     auth = AuthService()
@@ -339,11 +338,11 @@ Running the script should produce output similar to:
 
 ```text
 Created user: alice@example.com
-Access token:  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-Refresh token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Access token:  a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7...
+Refresh token: f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8...
 Authenticated: alice@example.com
-New access token:  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-New refresh token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+New access token:  b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1...
+New refresh token: c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2...
 Logged out successfully.
 ```
 
@@ -357,8 +356,8 @@ Now that you have the basics working, explore these guides to go further:
   with `is_verified` and `joined_at`.
 - **[Configuration](../guides/configuration.md)** -- tune token lifetimes, hasher
   parameters, and more via `AuthConfig`.
-- **[Token Backends](../guides/token-backends.md)** -- switch from stateless JWT to
-  database-backed tokens for immediate revocation.
+- **[Token Backends](../guides/token-backends.md)** -- understand database-backed tokens
+  and how to write custom backends.
 - **[Password Hashing](../guides/password-hashing.md)** -- understand the Argon2/bcrypt/PBKDF2
   multi-hasher stack and transparent hash migration.
 - **[Password Validation](../guides/password-validation.md)** -- enforce password strength

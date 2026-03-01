@@ -7,6 +7,7 @@ from tortoise.models import Model
 
 from tortoise_auth.config import get_config
 from tortoise_auth.events import emit
+from tortoise_auth.exceptions import InvalidPasswordError
 from tortoise_auth.utils import is_password_usable, make_unusable_password
 
 
@@ -27,7 +28,12 @@ class AbstractUser(Model):
 
     async def set_password(self, raw_password: str) -> None:
         """Hash and save a new password, emitting a 'password_changed' event."""
-        ph = get_config().get_password_hash()
+        cfg = get_config()
+        if len(raw_password) > cfg.max_password_length:
+            raise InvalidPasswordError(
+                [f"Password exceeds maximum length of {cfg.max_password_length} characters"]
+            )
+        ph = cfg.get_password_hash()
         self.password = ph.hash(raw_password)
         await self.save(update_fields=["password"])
         await emit("password_changed", self)
@@ -41,7 +47,11 @@ class AbstractUser(Model):
         if not is_password_usable(self.password):
             return False
 
-        ph = get_config().get_password_hash()
+        cfg = get_config()
+        if len(raw_password) > cfg.max_password_length:
+            return False
+
+        ph = cfg.get_password_hash()
         try:
             valid, updated_hash = ph.verify_and_update(raw_password, self.password)
         except Exception:

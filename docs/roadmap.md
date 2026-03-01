@@ -12,8 +12,6 @@ The following features are implemented and available in the current release:
   `is_verified` flags.
 - **AuthService** -- high-level async API covering `login`, `authenticate`,
   `refresh`, `logout`, and `logout_all`.
-- **JWT token backend** -- stateless tokens via PyJWT with HS256 and RS256
-  support and in-memory revocation.
 - **Database token backend** -- server-side tokens stored in Tortoise ORM with
   SHA-256 hashing and full revocation support.
 - **Password hashing** -- Argon2id (primary), Bcrypt, and PBKDF2-SHA256 with

@@ -141,7 +141,7 @@ from tortoise_auth.validators.similarity import UserAttributeSimilarityValidator
 
 configure(AuthConfig(
     user_model="models.User",
-    jwt_secret="your-secret-key",
+
     password_validators=[
         MinimumLengthValidator(min_length=12),
         CommonPasswordValidator(),
@@ -160,7 +160,7 @@ length and numeric checks:
 ```python
 configure(AuthConfig(
     user_model="models.User",
-    jwt_secret="your-secret-key",
+
     password_validators=[
         MinimumLengthValidator(min_length=10),
         NumericPasswordValidator(),
@@ -267,7 +267,7 @@ from tortoise_auth.validators.similarity import UserAttributeSimilarityValidator
 
 configure(AuthConfig(
     user_model="models.User",
-    jwt_secret="your-secret-key",
+
     password_validators=[
         MinimumLengthValidator(),
         CommonPasswordValidator(),

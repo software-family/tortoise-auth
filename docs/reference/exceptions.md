@@ -106,15 +106,16 @@ longer enabled. The `hash` attribute contains the unrecognised value.
 |----------|--------------------------------|
 | Parent   | `TortoiseAuthError`            |
 
-Raised when `configure()` receives an invalid `AuthConfig`. Common causes include a missing
-`jwt_secret`, an unresolvable `user_model` path, or mutually exclusive options.
+Raised when `configure()` receives an invalid `AuthConfig`. Common causes include an
+unresolvable `user_model` path or mutually exclusive options.
 
 ```python
 from tortoise_auth import AuthConfig, configure
 from tortoise_auth.exceptions import ConfigurationError
 
 try:
-    configure(AuthConfig(user_model="models.User", jwt_secret=""))
+    config = AuthConfig(user_model="models.User")
+    config.validate()
 except ConfigurationError as exc:
     print(exc)  # descriptive message about what is wrong
 ```
@@ -177,7 +178,7 @@ except TokenError:
 |----------|--------------------------------|
 | Parent   | `TokenError`                   |
 
-Raised when a JWT token's `exp` claim is in the past. The client should use its refresh
+Raised when a token's expiration time is in the past. The client should use its refresh
 token to obtain a new access token.
 
 ---

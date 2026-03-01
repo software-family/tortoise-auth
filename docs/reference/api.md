@@ -36,17 +36,18 @@ set the values relevant to your deployment.
 | `bcrypt_rounds` | `int` | `12` | Bcrypt work factor (log2 rounds). |
 | `pbkdf2_iterations` | `int` | `600_000` | PBKDF2-HMAC-SHA256 iteration count. |
 | `password_validators` | `list[PasswordValidator]` | See below | List of password validator instances. |
-| `jwt_secret` | `str` | `""` | Secret key for signing JWT tokens. |
-| `jwt_algorithm` | `str` | `"HS256"` | JWT signing algorithm (e.g. `"HS256"`, `"RS256"`). |
-| `jwt_public_key` | `str` | `""` | Public key for asymmetric JWT algorithms. |
-| `jwt_access_token_lifetime` | `int` | `900` | Access token lifetime in seconds (15 minutes). |
-| `jwt_refresh_token_lifetime` | `int` | `604_800` | Refresh token lifetime in seconds (7 days). |
-| `jwt_issuer` | `str` | `""` | JWT `iss` claim. Left out of the payload when empty. |
-| `jwt_audience` | `str` | `""` | JWT `aud` claim. Audience verification is disabled when empty. |
-| `token_backend` | `str` | `"jwt"` | Token backend to use: `"jwt"` or `"database"`. |
-| `db_token_length` | `int` | `64` | Length of generated opaque tokens for the database backend. |
-| `signing_secret` | `str` | `""` | HMAC secret for the `signing` module. Falls back to `jwt_secret` when empty. |
+| `access_token_lifetime` | `int` | `900` | Access token lifetime in seconds (15 minutes). |
+| `refresh_token_lifetime` | `int` | `604_800` | Refresh token lifetime in seconds (7 days). |
+| `token_length` | `int` | `64` | Length of generated opaque tokens for the database backend. |
+| `max_tokens_per_user` | `int` | `100` | Maximum active tokens per user before auto-revocation. |
+| `max_password_length` | `int` | `4096` | Maximum allowed password length in characters. |
+| `signing_secret` | `str` | `""` | HMAC secret for the `signing` module. |
 | `signing_token_lifetime` | `int` | `86_400` | Default `max_age` for signed tokens in seconds (24 hours). |
+| `jwt_secret` | `str` | `""` | Secret key for signing JWTs. Falls back to `signing_secret` if empty. |
+| `jwt_algorithm` | `str` | `"HS256"` | JWT signing algorithm. |
+| `jwt_issuer` | `str` | `""` | JWT `iss` claim value. |
+| `jwt_audience` | `str` | `""` | JWT `aud` claim value. |
+| `jwt_blacklist_enabled` | `bool` | `False` | Enable database-backed JWT blacklist. |
 
 The default `password_validators` list is:
 
@@ -69,13 +70,6 @@ def validate(self) -> None
 
 Validate the configuration and raise on inconsistencies.
 
-**Raises:**
-
-| Exception | Condition |
-|---|---|
-| `ConfigurationError` | `jwt_secret` is empty when `token_backend` is `"jwt"`. |
-| `ConfigurationError` | `jwt_public_key` is empty when `jwt_algorithm` starts with `"RS"`. |
-
 ---
 
 #### `AuthConfig.effective_signing_secret`
@@ -85,11 +79,9 @@ Validate the configuration and raise on inconsistencies.
 def effective_signing_secret(self) -> str
 ```
 
-Return `signing_secret` if it is set, otherwise fall back to `jwt_secret`. Used
-internally by the `signing` module to avoid requiring a separate secret when the JWT
-secret is already configured.
+Return `signing_secret`. Used internally by the `signing` module.
 
-**Returns:** The resolved signing secret string.
+**Returns:** The signing secret string.
 
 ---
 
@@ -172,11 +164,18 @@ async def set_password(self, raw_password: str) -> None
 ```
 
 Hash a raw password with the configured primary hasher (Argon2), save the model, and
-emit a `"password_changed"` event.
+emit a `"password_changed"` event. Raises `InvalidPasswordError` if the password exceeds
+`max_password_length`.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `raw_password` | `str` | The plaintext password to hash and store. |
+
+**Raises:**
+
+| Exception | Condition |
+|---|---|
+| `InvalidPasswordError` | The password exceeds `max_password_length` characters. |
 
 ---
 
@@ -190,7 +189,7 @@ Verify a plaintext password against the stored hash. If the hash was produced by
 non-primary hasher (Bcrypt, PBKDF2) or by an older parameter set, the hash is
 transparently upgraded and saved.
 
-Returns `False` immediately if the password is unusable.
+Returns `False` immediately if the password is unusable or exceeds `max_password_length`.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -355,6 +354,51 @@ Same as `AccessToken`: `is_expired`, `is_valid`, `hash_token()`, `generate_token
 
 ---
 
+### `OutstandingToken`
+
+```python
+class OutstandingToken(Model):
+    class Meta:
+        table = "tortoise_auth_outstanding_tokens"
+```
+
+Database model tracking every JWT issued when the blacklist is enabled. Used by
+`JWTBackend` to support `revoke_all_for_user()`.
+
+#### Fields
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `IntField` | `primary_key=True` | Auto-incrementing primary key. |
+| `jti` | `CharField(64)` | `unique=True, db_index=True` | Unique JWT identifier (UUID hex). |
+| `user_id` | `CharField(255)` | `db_index=True` | String representation of the owning user's primary key. |
+| `token_type` | `CharField(16)` | | Token type: `"access"` or `"refresh"`. |
+| `created_at` | `DatetimeField` | | Token creation timestamp. |
+| `expires_at` | `DatetimeField` | | Absolute expiration timestamp. |
+
+---
+
+### `BlacklistedToken`
+
+```python
+class BlacklistedToken(Model):
+    class Meta:
+        table = "tortoise_auth_blacklisted_tokens"
+```
+
+Database model storing revoked JWT token identifiers. A token whose JTI appears
+in this table will be rejected by `JWTBackend.verify_token()`.
+
+#### Fields
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `IntField` | `primary_key=True` | Auto-incrementing primary key. |
+| `jti` | `CharField(64)` | `unique=True, db_index=True` | JTI of the revoked token. |
+| `blacklisted_at` | `DatetimeField` | `auto_now_add=True` | Timestamp when the token was blacklisted. |
+
+---
+
 ## `tortoise_auth.services`
 
 High-level service layer orchestrating authentication workflows.
@@ -378,7 +422,7 @@ at runtime.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `config` | `AuthConfig \| None` | `None` | Configuration override. Falls back to `get_config()`. |
-| `backend` | `TokenBackend \| None` | `None` | Token backend override. Auto-selected from `config.token_backend` when `None`. |
+| `backend` | `TokenBackend \| None` | `None` | Token backend override. Uses `DatabaseTokenBackend` when `None`. |
 
 ---
 
@@ -400,8 +444,8 @@ def config(self) -> AuthConfig
 def backend(self) -> TokenBackend
 ```
 
-**Returns:** The active token backend. If none was injected, instantiates `JWTBackend`
-or `DatabaseTokenBackend` based on `config.token_backend`.
+**Returns:** The active token backend. If none was injected, instantiates
+`DatabaseTokenBackend` from the config.
 
 ---
 
@@ -424,7 +468,7 @@ Authenticate a user by email and password. On success, creates a token pair, upd
 |---|---|---|
 | `identifier` | `str` | The user's email address. |
 | `password` | `str` | The plaintext password. |
-| `**extra_claims` | `Any` | Additional claims to embed in the access token (JWT backend only). |
+| `**extra_claims` | `Any` | Additional claims forwarded to the token backend. |
 
 **Returns:** An `AuthResult` containing the user instance and the token pair.
 
@@ -447,7 +491,7 @@ and be active.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `token` | `str` | A raw access token (JWT string or opaque database token). |
+| `token` | `str` | A raw access token (opaque database token). |
 
 **Returns:** The user model instance.
 
@@ -509,9 +553,8 @@ raising.
 async def logout_all(self, user_id: str) -> None
 ```
 
-Revoke all tokens for a given user. Emits a `"user_logout"` event. For the JWT
-backend this is a no-op (JWT tokens cannot be enumerated); use the database backend
-for full server-side revocation.
+Revoke all tokens for a given user. Emits a `"user_logout"` event. All active access
+and refresh tokens for the user are immediately invalidated in the database.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -537,8 +580,8 @@ Immutable pair of access and refresh token strings. Returned by
 
 | Field | Type | Description |
 |---|---|---|
-| `access_token` | `str` | The access token (JWT string or opaque token). |
-| `refresh_token` | `str` | The refresh token (JWT string or opaque token). |
+| `access_token` | `str` | The access token (opaque token). |
+| `refresh_token` | `str` | The refresh token (opaque token). |
 
 ---
 
@@ -594,7 +637,7 @@ Decoded token payload returned by `TokenBackend.verify_token()`.
 | `jti` | `str` | Unique token identifier (UUID hex). |
 | `iat` | `int` | Issued-at timestamp (Unix epoch seconds). |
 | `exp` | `int` | Expiration timestamp (Unix epoch seconds). |
-| `extra` | `dict[str, Any] \| None` | Additional claims embedded via `**extra_claims`, or `None`. |
+| `extra` | `dict[str, Any] \| None` | Additional claims (for custom backends), or `None`. |
 
 ---
 
@@ -682,108 +725,6 @@ Revoke every token belonging to a user.
 | Parameter | Type | Description |
 |---|---|---|
 | `user_id` | `str` | The user's primary key as a string. |
-
----
-
-## `tortoise_auth.tokens.jwt`
-
-JWT-based token backend using [PyJWT](https://pyjwt.readthedocs.io/).
-
-### `JWTBackend`
-
-```python
-class JWTBackend:
-    def __init__(self, config: AuthConfig | None = None) -> None
-```
-
-Token backend that encodes tokens as signed JWTs. Revocation is tracked via an
-in-memory set of revoked `jti` values, which means revocations do not survive process
-restarts. Use `DatabaseTokenBackend` if you need persistent revocation.
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `config` | `AuthConfig \| None` | `None` | Configuration override. Falls back to `get_config()`. |
-
-Implements: `TokenBackend`
-
----
-
-#### `JWTBackend.create_tokens`
-
-```python
-async def create_tokens(self, user_id: str, **extra: Any) -> TokenPair
-```
-
-Create a JWT access/refresh token pair. The access token includes any `extra` claims
-under the `"extra"` key in the payload. The refresh token never carries extra claims.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `user_id` | `str` | The user's primary key as a string. |
-| `**extra` | `Any` | Additional claims embedded in the access token payload. |
-
-**Returns:** A `TokenPair` containing two JWT strings.
-
----
-
-#### `JWTBackend.verify_token`
-
-```python
-async def verify_token(
-    self,
-    token: str,
-    *,
-    token_type: str = "access",
-) -> TokenPayload
-```
-
-Decode a JWT, verify its signature, expiration, issuer, audience, and token type, then
-check the in-memory revocation list.
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `token` | `str` | | The raw JWT string. |
-| `token_type` | `str` | `"access"` | Expected token type (`"access"` or `"refresh"`). |
-
-**Returns:** A `TokenPayload`.
-
-**Raises:**
-
-| Exception | Condition |
-|---|---|
-| `TokenExpiredError` | The JWT `exp` claim is in the past. |
-| `TokenInvalidError` | The JWT cannot be decoded, or its `type` claim does not match `token_type`. |
-| `TokenRevokedError` | The token's `jti` is in the in-memory revocation set. |
-
----
-
-#### `JWTBackend.revoke_token`
-
-```python
-async def revoke_token(self, token: str) -> None
-```
-
-Revoke a JWT by adding its `jti` to the in-memory blacklist. If the token cannot be
-decoded, the call is silently ignored.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `token` | `str` | The raw JWT string to revoke. |
-
----
-
-#### `JWTBackend.revoke_all_for_user`
-
-```python
-async def revoke_all_for_user(self, user_id: str) -> None
-```
-
-**No-op.** The JWT backend cannot enumerate all tokens for a user because JWTs are
-stateless. Use `DatabaseTokenBackend` if you need this capability.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `user_id` | `str` | Ignored. |
 
 ---
 
@@ -898,6 +839,125 @@ async def cleanup_expired(self) -> int
 
 Delete all expired tokens from both the access and refresh token tables. Call this
 periodically (e.g., from a scheduled task) to keep the database lean.
+
+**Returns:** The total number of deleted rows across both tables.
+
+---
+
+## `tortoise_auth.tokens.jwt`
+
+Stateless JWT token backend using PyJWT, with optional database-backed blacklist
+for token revocation.
+
+### `JWTBackend`
+
+```python
+class JWTBackend:
+    def __init__(self, config: AuthConfig | None = None) -> None
+```
+
+Token backend that issues and verifies JSON Web Tokens signed with HMAC-SHA256.
+Tokens are stateless by default. When `jwt_blacklist_enabled` is `True`, issued
+tokens are tracked in `OutstandingToken` and revoked tokens are recorded in
+`BlacklistedToken`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `config` | `AuthConfig \| None` | `None` | Configuration override. Falls back to `get_config()`. |
+
+Implements: `TokenBackend`
+
+---
+
+#### `JWTBackend.create_tokens`
+
+```python
+async def create_tokens(self, user_id: str, **extra: Any) -> TokenPair
+```
+
+Encode two JWTs (access + refresh) with HMAC-SHA256. Claims include `sub`,
+`token_type`, `jti`, `iat`, `exp`, and optionally `iss`, `aud`, and `extra`.
+When the blacklist is enabled, an `OutstandingToken` record is created for each
+token.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `user_id` | `str` | The user's primary key as a string. |
+| `**extra` | `Any` | Additional claims stored under the `extra` key in the access token. |
+
+**Returns:** A `TokenPair` containing two JWT strings.
+
+---
+
+#### `JWTBackend.verify_token`
+
+```python
+async def verify_token(
+    self,
+    token: str,
+    *,
+    token_type: str = "access",
+) -> TokenPayload
+```
+
+Decode and verify a JWT: checks signature, expiration, token type, and (when
+blacklist is enabled) that the JTI is not blacklisted.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `token` | `str` | | The JWT string. |
+| `token_type` | `str` | `"access"` | Expected token type. |
+
+**Returns:** A `TokenPayload`.
+
+**Raises:**
+
+| Exception | Condition |
+|---|---|
+| `TokenExpiredError` | The token's `exp` claim is in the past. |
+| `TokenInvalidError` | Invalid signature, wrong type, missing JTI, or unrecognized token type. |
+| `TokenRevokedError` | The token's JTI is in the blacklist (blacklist enabled only). |
+
+---
+
+#### `JWTBackend.revoke_token`
+
+```python
+async def revoke_token(self, token: str) -> None
+```
+
+Revoke a JWT by adding its JTI to `BlacklistedToken`. When the blacklist is
+disabled, this is a no-op. Can revoke already-expired tokens.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `token` | `str` | The JWT string to revoke. |
+
+---
+
+#### `JWTBackend.revoke_all_for_user`
+
+```python
+async def revoke_all_for_user(self, user_id: str) -> None
+```
+
+Revoke all tokens for a user by blacklisting their outstanding JTIs. When the
+blacklist is disabled, this is a no-op.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `user_id` | `str` | The user's primary key as a string. |
+
+---
+
+#### `JWTBackend.cleanup_expired`
+
+```python
+async def cleanup_expired(self) -> int
+```
+
+Delete expired `OutstandingToken` records and their associated `BlacklistedToken`
+entries. Call periodically to keep the blacklist tables lean.
 
 **Returns:** The total number of deleted rows across both tables.
 

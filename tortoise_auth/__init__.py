@@ -19,28 +19,30 @@ from tortoise_auth.exceptions import (
     TokenRevokedError,
     TortoiseAuthError,
 )
-from tortoise_auth.models import AbstractUser, AccessToken, RefreshToken
+from tortoise_auth.models import (
+    AbstractUser,
+    BlacklistedToken,
+    OutstandingToken,
+)
 from tortoise_auth.services import AuthService
 from tortoise_auth.signing import Signer, TimestampSigner, make_token, verify_token
 from tortoise_auth.tokens import AuthResult, TokenBackend, TokenPair, TokenPayload
-from tortoise_auth.tokens.database import DatabaseTokenBackend
 from tortoise_auth.tokens.jwt import JWTBackend
 
 __all__ = [
     "AbstractUser",
-    "AccessToken",
     "AuthConfig",
     "AuthResult",
     "AuthService",
     "AuthenticationError",
     "BadSignatureError",
+    "BlacklistedToken",
     "ConfigurationError",
-    "DatabaseTokenBackend",
     "EventError",
     "InvalidHashError",
     "InvalidPasswordError",
     "JWTBackend",
-    "RefreshToken",
+    "OutstandingToken",
     "SignatureExpiredError",
     "Signer",
     "SigningError",

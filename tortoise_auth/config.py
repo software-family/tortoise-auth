@@ -43,36 +43,35 @@ class AuthConfig:
     # Validators
     password_validators: list[PasswordValidator] = field(default_factory=_default_validators)
 
-    # JWT settings
-    jwt_secret: str = ""
-    jwt_algorithm: str = "HS256"
-    jwt_public_key: str = ""
-    jwt_access_token_lifetime: int = 900  # 15 minutes
-    jwt_refresh_token_lifetime: int = 604_800  # 7 days
-    jwt_issuer: str = ""
-    jwt_audience: str = ""
+    # Token settings
+    access_token_lifetime: int = 900  # 15 minutes
+    refresh_token_lifetime: int = 604_800  # 7 days
 
-    # Token backend
-    token_backend: str = "jwt"  # "jwt" or "database"
-
-    # Database tokens
-    db_token_length: int = 64
+    # Password limits
+    max_password_length: int = 4096
 
     # Signing (HMAC)
     signing_secret: str = ""
     signing_token_lifetime: int = 86_400  # 24 hours
 
+    # JWT settings
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_issuer: str = ""
+    jwt_audience: str = ""
+    jwt_blacklist_enabled: bool = False
+
     def validate(self) -> None:
         """Validate config. Raises ConfigurationError."""
-        if self.token_backend == "jwt" and not self.jwt_secret:
-            raise ConfigurationError("jwt_secret required for JWT backend")
-        if self.jwt_algorithm.startswith("RS") and not self.jwt_public_key:
-            raise ConfigurationError("jwt_public_key required for RS256")
+        if self.access_token_lifetime <= 0:
+            raise ConfigurationError("access_token_lifetime must be positive")
+        if self.refresh_token_lifetime <= 0:
+            raise ConfigurationError("refresh_token_lifetime must be positive")
 
     @property
     def effective_signing_secret(self) -> str:
-        """Return signing_secret if set, otherwise fall back to jwt_secret."""
-        return self.signing_secret or self.jwt_secret
+        """Return signing_secret."""
+        return self.signing_secret
 
     def get_password_hash(self) -> PasswordHash:
         """Build a PasswordHash instance from current config."""

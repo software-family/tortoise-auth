@@ -286,5 +286,5 @@ async def authenticate(email: str, raw_password: str) -> User | None:
 
 ---
 
-Next step: see the [Configuration](configuration.md) guide to tune Argon2 parameters, JWT
-settings, and password validators.
+Next step: see the [Configuration](configuration.md) guide to tune Argon2 parameters,
+token settings, and password validators.

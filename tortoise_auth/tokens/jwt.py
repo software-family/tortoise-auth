@@ -1,9 +1,10 @@
-"""JWT token backend using PyJWT."""
+"""JWT token backend following the SimpleJWT approach."""
 
 from __future__ import annotations
 
 import time
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import jwt
@@ -18,118 +19,193 @@ from tortoise_auth.tokens import TokenPair, TokenPayload
 
 
 class JWTBackend:
-    """JWT-based token backend with in-memory revocation."""
+    """Stateless JWT token backend with optional blacklist for revocation."""
 
     def __init__(self, config: AuthConfig | None = None) -> None:
         self._config = config
-        self._revoked_jtis: set[str] = set()
 
     @property
     def config(self) -> AuthConfig:
         return self._config or get_config()
 
+    @property
+    def _secret(self) -> str:
+        return self.config.jwt_secret or self.config.signing_secret
+
     async def create_tokens(self, user_id: str, **extra: Any) -> TokenPair:
-        """Create an access/refresh token pair."""
-        now = int(time.time())
+        """Create a JWT access/refresh token pair."""
         cfg = self.config
-        access = self._encode(
-            sub=user_id,
-            token_type="access",
-            now=now,
-            lifetime=cfg.jwt_access_token_lifetime,
-            extra=extra or None,
-        )
-        refresh = self._encode(
-            sub=user_id,
-            token_type="refresh",
-            now=now,
-            lifetime=cfg.jwt_refresh_token_lifetime,
-            extra=None,
-        )
-        return TokenPair(access_token=access, refresh_token=refresh)
+        now = time.time()
+        now_int = int(now)
+
+        access_jti = uuid.uuid4().hex
+        access_payload: dict[str, Any] = {
+            "sub": user_id,
+            "token_type": "access",
+            "jti": access_jti,
+            "iat": now_int,
+            "exp": now_int + cfg.access_token_lifetime,
+        }
+        if cfg.jwt_issuer:
+            access_payload["iss"] = cfg.jwt_issuer
+        if cfg.jwt_audience:
+            access_payload["aud"] = cfg.jwt_audience
+        if extra:
+            access_payload["extra"] = extra
+
+        refresh_jti = uuid.uuid4().hex
+        refresh_payload: dict[str, Any] = {
+            "sub": user_id,
+            "token_type": "refresh",
+            "jti": refresh_jti,
+            "iat": now_int,
+            "exp": now_int + cfg.refresh_token_lifetime,
+        }
+        if cfg.jwt_issuer:
+            refresh_payload["iss"] = cfg.jwt_issuer
+        if cfg.jwt_audience:
+            refresh_payload["aud"] = cfg.jwt_audience
+
+        access_token = jwt.encode(access_payload, self._secret, algorithm=cfg.jwt_algorithm)
+        refresh_token = jwt.encode(refresh_payload, self._secret, algorithm=cfg.jwt_algorithm)
+
+        if cfg.jwt_blacklist_enabled:
+            from tortoise_auth.models.jwt_blacklist import OutstandingToken
+
+            now_dt = datetime.fromtimestamp(now, tz=UTC)
+            await OutstandingToken.bulk_create([
+                OutstandingToken(
+                    jti=access_jti,
+                    user_id=user_id,
+                    token_type="access",
+                    created_at=now_dt,
+                    expires_at=datetime.fromtimestamp(
+                        now_int + cfg.access_token_lifetime, tz=UTC
+                    ),
+                ),
+                OutstandingToken(
+                    jti=refresh_jti,
+                    user_id=user_id,
+                    token_type="refresh",
+                    created_at=now_dt,
+                    expires_at=datetime.fromtimestamp(
+                        now_int + cfg.refresh_token_lifetime, tz=UTC
+                    ),
+                ),
+            ])
+
+        return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
     async def verify_token(
         self, token: str, *, token_type: str = "access"
     ) -> TokenPayload:
         """Decode and verify a JWT token."""
-        cfg = self.config
-        try:
-            decode_key = cfg.jwt_public_key if cfg.jwt_public_key else cfg.jwt_secret
-            kwargs: dict[str, Any] = {"algorithms": [cfg.jwt_algorithm]}
-            if cfg.jwt_issuer:
-                kwargs["issuer"] = cfg.jwt_issuer
-            if cfg.jwt_audience:
-                kwargs["audience"] = cfg.jwt_audience
-            else:
-                kwargs["options"] = {"verify_aud": False}
+        if token_type not in ("access", "refresh"):
+            raise TokenInvalidError(f"Unknown token type: {token_type!r}")
 
-            payload = jwt.decode(token, decode_key, **kwargs)
+        decode_options: dict[str, Any] = {}
+        decode_kwargs: dict[str, Any] = {
+            "algorithms": [self.config.jwt_algorithm],
+            "options": decode_options,
+        }
+        if self.config.jwt_issuer:
+            decode_kwargs["issuer"] = self.config.jwt_issuer
+        if self.config.jwt_audience:
+            decode_kwargs["audience"] = self.config.jwt_audience
+        else:
+            decode_options["verify_aud"] = False
+
+        try:
+            payload = jwt.decode(token, self._secret, **decode_kwargs)
         except jwt.ExpiredSignatureError as exc:
             raise TokenExpiredError("Token has expired") from exc
         except jwt.InvalidTokenError as exc:
             raise TokenInvalidError(f"Invalid token: {exc}") from exc
 
-        actual_type = payload.get("type", "")
-        if actual_type != token_type:
+        if payload.get("token_type") != token_type:
             raise TokenInvalidError(
-                f"Expected token type {token_type!r}, got {actual_type!r}"
+                f"Expected token type {token_type!r}, got {payload.get('token_type')!r}"
             )
 
-        jti = payload.get("jti", "")
-        if jti in self._revoked_jtis:
-            raise TokenRevokedError("Token has been revoked")
+        jti = payload.get("jti")
+        if not jti:
+            raise TokenInvalidError("Token missing jti claim")
+
+        if self.config.jwt_blacklist_enabled:
+            from tortoise_auth.models.jwt_blacklist import BlacklistedToken
+
+            if await BlacklistedToken.filter(jti=jti).exists():
+                raise TokenRevokedError("Token has been revoked")
 
         return TokenPayload(
             sub=payload["sub"],
-            token_type=actual_type,
+            token_type=token_type,
             jti=jti,
-            iat=payload.get("iat", 0),
-            exp=payload.get("exp", 0),
+            iat=payload["iat"],
+            exp=payload["exp"],
             extra=payload.get("extra"),
         )
 
     async def revoke_token(self, token: str) -> None:
-        """Revoke a token by adding its jti to the in-memory blacklist."""
-        try:
-            cfg = self.config
-            decode_key = cfg.jwt_public_key if cfg.jwt_public_key else cfg.jwt_secret
-            payload = jwt.decode(
-                token,
-                decode_key,
-                algorithms=[cfg.jwt_algorithm],
-                options={"verify_exp": False, "verify_aud": False},
-            )
-            jti = payload.get("jti", "")
-            if jti:
-                self._revoked_jtis.add(jti)
-        except jwt.InvalidTokenError:
-            pass  # Already invalid, nothing to revoke
+        """Revoke a JWT by adding its JTI to the blacklist."""
+        if not self.config.jwt_blacklist_enabled:
+            return
+
+        payload = self._decode_unverified(token)
+        if payload is None:
+            return
+
+        jti = payload.get("jti")
+        if not jti:
+            return
+
+        from tortoise_auth.models.jwt_blacklist import BlacklistedToken
+
+        if not await BlacklistedToken.filter(jti=jti).exists():
+            await BlacklistedToken.create(jti=jti)
 
     async def revoke_all_for_user(self, user_id: str) -> None:
-        """No-op for JWT backend — cannot revoke all without token list."""
+        """Revoke all tokens for a user by blacklisting their outstanding JTIs."""
+        if not self.config.jwt_blacklist_enabled:
+            return
 
-    def _encode(
-        self,
-        *,
-        sub: str,
-        token_type: str,
-        now: int,
-        lifetime: int,
-        extra: dict[str, Any] | None,
-    ) -> str:
-        """Encode a JWT token."""
-        cfg = self.config
-        payload: dict[str, Any] = {
-            "sub": sub,
-            "type": token_type,
-            "jti": uuid.uuid4().hex,
-            "iat": now,
-            "exp": now + lifetime,
-        }
-        if cfg.jwt_issuer:
-            payload["iss"] = cfg.jwt_issuer
-        if cfg.jwt_audience:
-            payload["aud"] = cfg.jwt_audience
-        if extra:
-            payload["extra"] = extra
-        return jwt.encode(payload, cfg.jwt_secret, algorithm=cfg.jwt_algorithm)
+        from tortoise_auth.models.jwt_blacklist import BlacklistedToken, OutstandingToken
+
+        jtis = await OutstandingToken.filter(user_id=user_id).values_list("jti", flat=True)
+        if not jtis:
+            return
+
+        existing = set(
+            await BlacklistedToken.filter(jti__in=jtis).values_list("jti", flat=True)
+        )
+        new_entries = [
+            BlacklistedToken(jti=jti) for jti in jtis if jti not in existing
+        ]
+        if new_entries:
+            await BlacklistedToken.bulk_create(new_entries)
+
+    async def cleanup_expired(self) -> int:
+        """Delete expired outstanding tokens and their blacklist entries."""
+        from tortoise_auth.models.jwt_blacklist import BlacklistedToken, OutstandingToken
+
+        now = datetime.now(tz=UTC)
+        expired_jtis = list(
+            await OutstandingToken.filter(expires_at__lt=now).values_list("jti", flat=True)
+        )
+        if not expired_jtis:
+            return 0
+        blacklist_deleted = await BlacklistedToken.filter(jti__in=expired_jtis).delete()
+        outstanding_deleted = await OutstandingToken.filter(expires_at__lt=now).delete()
+        return outstanding_deleted + blacklist_deleted
+
+    def _decode_unverified(self, token: str) -> dict[str, Any] | None:
+        """Decode a JWT without verifying expiration (for revocation of expired tokens)."""
+        try:
+            return jwt.decode(
+                token,
+                self._secret,
+                algorithms=[self.config.jwt_algorithm],
+                options={"verify_exp": False, "verify_aud": False},
+            )
+        except jwt.InvalidTokenError:
+            return None

@@ -1,145 +1,7 @@
 # Token Backends
 
-tortoise-auth ships with two token backends -- **JWT** and **Database** -- and
-defines a `TokenBackend` Protocol that lets you plug in your own implementation.
-The backend you choose controls how tokens are created, verified, stored, and
-revoked.
-
-## Choosing a Backend
-
-| Feature             | JWT (`JWTBackend`)                        | Database (`DatabaseTokenBackend`)               |
-|---------------------|-------------------------------------------|-------------------------------------------------|
-| **Storage**         | Stateless -- token is self-contained      | Server-side -- tokens stored in two DB tables   |
-| **Revocation**      | In-memory `set` of JTIs (per-process)     | Persistent `is_revoked` flag per token row      |
-| **Revoke all**      | No-op (cannot enumerate tokens)           | Full support -- marks all user rows as revoked  |
-| **Performance**     | No DB round-trip on verify                | One DB query per verify                         |
-| **Scalability**     | Scales horizontally without shared state  | Requires shared database                        |
-| **Token size**      | Larger (encoded JSON payload)             | Short opaque string (configurable length)       |
-| **Setup**           | Needs `jwt_secret` (and `jwt_public_key` for RS256) | Needs `tortoise_auth.models` in Tortoise modules |
-| **Best for**        | APIs where instant revocation is not critical | Apps requiring immediate, reliable revocation  |
-
-You select the backend globally through `AuthConfig.token_backend`:
-
-```python
-from tortoise_auth import AuthConfig, configure
-
-# Use JWT (default)
-configure(AuthConfig(
-    jwt_secret="your-secret-key",
-    token_backend="jwt",
-))
-
-# Use database tokens
-configure(AuthConfig(
-    jwt_secret="your-secret-key",   # still needed for signing_secret fallback
-    token_backend="database",
-))
-```
-
-You can also inject a specific backend instance into `AuthService` directly:
-
-```python
-from tortoise_auth.services.auth import AuthService
-from tortoise_auth.tokens.jwt import JWTBackend
-
-auth = AuthService(backend=JWTBackend())
-```
-
----
-
-## JWT Backend
-
-::: info "Module"
-    `tortoise_auth.tokens.jwt.JWTBackend`
-
-The JWT backend encodes all token data into a signed JSON Web Token. Tokens are
-self-contained and can be verified without a database query.
-
-### Configuration
-
-The following `AuthConfig` fields control JWT behavior:
-
-| Field                       | Type  | Default     | Description                                    |
-|-----------------------------|-------|-------------|------------------------------------------------|
-| `jwt_secret`                | `str` | `""`        | Signing key (required). For HS256, this is both the signing and verification key. For RS256, this is the **private** key. |
-| `jwt_algorithm`             | `str` | `"HS256"`   | JWT algorithm. Supported: `HS256`, `RS256`.    |
-| `jwt_public_key`            | `str` | `""`        | Public key for RS256 verification. Required when `jwt_algorithm` starts with `RS`. |
-| `jwt_access_token_lifetime` | `int` | `900`       | Access token lifetime in seconds (15 minutes). |
-| `jwt_refresh_token_lifetime`| `int` | `604800`    | Refresh token lifetime in seconds (7 days).    |
-| `jwt_issuer`                | `str` | `""`        | Optional `iss` claim. When set, verification enforces it. |
-| `jwt_audience`              | `str` | `""`        | Optional `aud` claim. When set, verification enforces it. |
-
-### Payload Structure
-
-Each JWT contains the following claims:
-
-```json
-{
-  "sub": "42",
-  "type": "access",
-  "jti": "a1b2c3d4e5f6...",
-  "iat": 1700000000,
-  "exp": 1700000900,
-  "iss": "my-app",
-  "aud": "my-audience",
-  "extra": {"role": "admin"}
-}
-```
-
-| Claim   | Always present | Description                                          |
-|---------|----------------|------------------------------------------------------|
-| `sub`   | Yes            | User ID as a string.                                 |
-| `type`  | Yes            | `"access"` or `"refresh"`.                           |
-| `jti`   | Yes            | Unique token identifier (UUID4 hex).                 |
-| `iat`   | Yes            | Issued-at timestamp (Unix epoch).                    |
-| `exp`   | Yes            | Expiration timestamp (Unix epoch).                   |
-| `iss`   | No             | Issuer. Only included when `jwt_issuer` is set.      |
-| `aud`   | No             | Audience. Only included when `jwt_audience` is set.  |
-| `extra` | No             | Arbitrary extra claims. Only on **access** tokens, and only when extra kwargs are passed to `create_tokens`. |
-
-### Algorithm Support
-
-**HS256 (default)** -- symmetric HMAC-SHA256. The same `jwt_secret` is used for
-both signing and verification.
-
-```python
-configure(AuthConfig(
-    jwt_secret="your-256-bit-secret",
-    jwt_algorithm="HS256",
-))
-```
-
-**RS256** -- asymmetric RSA-SHA256. Sign with a private key, verify with the
-corresponding public key. Useful when token producers and consumers are separate
-services.
-
-```python
-configure(AuthConfig(
-    jwt_secret=private_key_pem,
-    jwt_public_key=public_key_pem,
-    jwt_algorithm="RS256",
-))
-```
-
-!!! warning "Validation"
-    Calling `config.validate()` raises `ConfigurationError` if `jwt_algorithm`
-    starts with `RS` and `jwt_public_key` is empty.
-
-### Revocation Limitations
-
-The JWT backend keeps a `set[str]` of revoked JTI values **in process memory**.
-This has two important consequences:
-
-1. **Revocations are lost on restart.** When the process exits, the set is gone.
-2. **Revocations are not shared across processes.** In a multi-worker or
-   multi-node deployment, revoking a token on one worker does not revoke it on
-   another.
-3. **`revoke_all_for_user()` is a no-op.** Since JWTs are self-contained, the
-   backend has no list of active tokens to iterate over.
-
-If you need reliable, immediate revocation, use the Database backend.
-
----
+tortoise-auth uses a **database-backed token backend** by default and defines a
+`TokenBackend` Protocol that lets you plug in your own implementation.
 
 ## Database Backend
 
@@ -187,7 +49,7 @@ tool (e.g., Aerich) so the tables are created in the database.
 Tokens are **never stored in plaintext**. When a token is created:
 
 1. A cryptographically secure random string is generated (length controlled by
-   `AuthConfig.db_token_length`, default `64`).
+   `AuthConfig.token_length`, default `64`).
 2. The raw string is hashed with **SHA-256** before being written to the
    database.
 3. The raw string is returned to the caller in the `TokenPair`.
@@ -198,8 +60,7 @@ tokens cannot be recovered.
 
 ### Full Revocation Support
 
-Unlike the JWT backend, the Database backend supports both single-token and
-bulk revocation:
+The Database backend supports both single-token and bulk revocation:
 
 ```python
 from tortoise_auth.tokens.database import DatabaseTokenBackend
@@ -247,9 +108,123 @@ async def cleanup_tokens_task() -> None:
 
 ---
 
+## JWT Backend
+
+::: info "Module"
+    `tortoise_auth.tokens.jwt.JWTBackend`
+
+The JWT backend issues stateless JSON Web Tokens signed with HMAC-SHA256. Tokens
+are verified by checking the signature and expiration — no database lookup is
+required. This makes the JWT backend ideal for high-throughput APIs where you
+want to avoid a database round-trip on every request.
+
+For revocation, the JWT backend supports an **optional blacklist** backed by two
+database tables. When the blacklist is disabled (the default), `revoke_token()`
+and `revoke_all_for_user()` are no-ops — this mirrors the approach used by
+`djangorestframework-simplejwt`.
+
+### Setup
+
+The JWT backend requires the `PyJWT` library (installed automatically as a
+dependency).
+
+```python
+from tortoise_auth import AuthConfig, configure
+from tortoise_auth.tokens.jwt import JWTBackend
+
+configure(AuthConfig(
+    user_model="myapp.User",
+    jwt_secret="your-secret-key",  # Required for JWT
+))
+
+backend = JWTBackend()
+```
+
+If `jwt_secret` is empty, the backend falls back to `signing_secret`.
+
+### Enabling the Blacklist
+
+To enable token revocation, set `jwt_blacklist_enabled=True` and register the
+blacklist models with Tortoise ORM:
+
+```python
+configure(AuthConfig(
+    user_model="myapp.User",
+    jwt_secret="your-secret-key",
+    jwt_blacklist_enabled=True,
+))
+
+TORTOISE_ORM = {
+    "connections": {"default": "sqlite://db.sqlite3"},
+    "apps": {
+        "models": {"models": ["your_app.models"]},
+        "tortoise_auth": {
+            "models": [
+                "tortoise_auth.models",
+                "tortoise_auth.models.jwt_blacklist",
+            ],
+        },
+    },
+}
+```
+
+This creates two tables:
+
+| Table                                | Model              | Purpose                          |
+|--------------------------------------|--------------------|----------------------------------|
+| `tortoise_auth_outstanding_tokens`   | `OutstandingToken`  | Tracks every JWT issued         |
+| `tortoise_auth_blacklisted_tokens`   | `BlacklistedToken`  | Stores revoked token JTIs       |
+
+### Revocation Behavior
+
+| Blacklist | `revoke_token()` | `revoke_all_for_user()` |
+|---|---|---|
+| Disabled (default) | No-op | No-op |
+| Enabled | Adds JTI to `BlacklistedToken` | Blacklists all JTIs from `OutstandingToken` for the user |
+
+### Issuer and Audience
+
+You can set `jwt_issuer` and `jwt_audience` in the config to include `iss` and
+`aud` claims in tokens. When set, these claims are verified on token
+verification.
+
+```python
+configure(AuthConfig(
+    jwt_secret="your-secret-key",
+    jwt_issuer="myapp",
+    jwt_audience="myapi",
+))
+```
+
+### Cleaning Up Expired Tokens
+
+When the blacklist is enabled, expired outstanding tokens and their blacklist
+entries accumulate over time. Call `cleanup_expired()` periodically:
+
+```python
+backend = JWTBackend()
+deleted = await backend.cleanup_expired()
+print(f"Removed {deleted} expired token records")
+```
+
+### Using with AuthService
+
+Pass the JWT backend to `AuthService` like any other backend:
+
+```python
+from tortoise_auth.services.auth import AuthService
+from tortoise_auth.tokens.jwt import JWTBackend
+
+auth = AuthService(backend=JWTBackend())
+result = await auth.login("user@example.com", "password123")
+# result.access_token is a JWT string
+```
+
+---
+
 ## The `TokenBackend` Protocol
 
-Both built-in backends conform to the `TokenBackend` Protocol defined in
+The built-in backend conforms to the `TokenBackend` Protocol defined in
 `tortoise_auth.tokens`. You can write your own backend (for example, backed by
 Redis) by implementing this Protocol:
 
@@ -339,7 +314,7 @@ All backends raise exceptions from `tortoise_auth.exceptions`:
 
 | Exception           | When                                           |
 |---------------------|-------------------------------------------------|
-| `TokenExpiredError` | The token's `exp` claim is in the past.         |
+| `TokenExpiredError` | The token has expired.                          |
 | `TokenInvalidError` | The token cannot be decoded, has the wrong type, or is not found in the database. |
 | `TokenRevokedError` | The token has been explicitly revoked.          |
 
@@ -409,34 +384,26 @@ class TokenPayload:
     jti: str                          # Unique token identifier
     iat: int                          # Issued-at (Unix epoch)
     exp: int                          # Expiration (Unix epoch)
-    extra: dict[str, Any] | None = None  # Extra claims (access tokens only)
+    extra: dict[str, Any] | None = None  # Extra claims (custom backends only)
 ```
-
-!!! note
-    The Database backend does not populate the `extra` field on
-    `TokenPayload`. Extra claims passed to `create_tokens` are currently only
-    embedded in JWT access tokens.
 
 ---
 
-## Using Backends Directly
+## Using the Backend Directly
 
 While `AuthService` is the recommended entry point for authentication workflows,
-you can use backends directly when you need lower-level token operations without
+you can use the backend directly when you need lower-level token operations without
 user lookup or event emission.
 
 ### Creating and Verifying Tokens
 
 ```python
-from tortoise_auth.tokens.jwt import JWTBackend
-from tortoise_auth.config import AuthConfig, configure
+from tortoise_auth.tokens.database import DatabaseTokenBackend
 
-configure(AuthConfig(jwt_secret="my-secret"))
+backend = DatabaseTokenBackend()
 
-backend = JWTBackend()
-
-# Create tokens
-pair = await backend.create_tokens("42", role="admin")
+# Create tokens (persisted in the database)
+pair = await backend.create_tokens("42")
 print(pair.access_token)
 print(pair.refresh_token)
 
@@ -444,7 +411,6 @@ print(pair.refresh_token)
 payload = await backend.verify_token(pair.access_token, token_type="access")
 print(payload.sub)         # "42"
 print(payload.token_type)  # "access"
-print(payload.extra)       # {"role": "admin"}
 
 # Verify the refresh token
 refresh_payload = await backend.verify_token(
@@ -461,20 +427,6 @@ await backend.revoke_token(pair.access_token)
 
 # This now raises TokenRevokedError
 await backend.verify_token(pair.access_token)
-```
-
-### Database Backend Direct Usage
-
-```python
-from tortoise_auth.tokens.database import DatabaseTokenBackend
-
-backend = DatabaseTokenBackend()
-
-# Create tokens (persisted in the database)
-pair = await backend.create_tokens("42")
-
-# Verify
-payload = await backend.verify_token(pair.access_token)
 
 # Revoke all tokens for a user
 await backend.revoke_all_for_user("42")
@@ -483,7 +435,7 @@ await backend.revoke_all_for_user("42")
 deleted = await backend.cleanup_expired()
 ```
 
-!!! tip "When to use backends directly"
+!!! tip "When to use the backend directly"
     Direct backend usage is appropriate for background jobs, management
     commands, or internal services that need to issue or revoke tokens without
     going through the full login flow. For request-handling code that needs

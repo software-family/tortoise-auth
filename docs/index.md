@@ -20,8 +20,8 @@ other async Python framework.
   timestamp tracking out of the box.
 - **AuthService** -- high-level async API for `login`, `authenticate`,
   `refresh`, `logout`, and `logout_all`.
-- **Pluggable token backends** -- choose between stateless **JWT** tokens or
-  server-side **database** tokens, swappable with a single config flag.
+- **Database token backend** -- server-side opaque tokens with full revocation
+  support. Pluggable via the `TokenBackend` Protocol for custom backends.
 - **Multi-algorithm password hashing** -- Argon2id (primary), Bcrypt, and
   PBKDF2-SHA256 with transparent auto-migration to the strongest hasher.
 - **Password validation** -- four built-in validators (minimum length, common
@@ -51,7 +51,7 @@ class User(AbstractUser):
 # Configure the library
 configure(AuthConfig(
     user_model="models.User",
-    jwt_secret="your-secret-key",
+    signing_secret="your-secret-key",
 ))
 
 
@@ -62,7 +62,7 @@ user = await auth.authenticate(result.access_token)
 ```
 
 !!! warning "Do not hardcode secrets"
-    The snippet above uses a literal `jwt_secret` for brevity. In production,
+    The snippet above uses a literal `signing_secret` for brevity. In production,
     always load secrets from environment variables or a dedicated secrets
     manager.
 
@@ -73,8 +73,8 @@ pip install tortoise-auth
 ```
 
 !!! note "Optional dependencies"
-    Argon2 hashing requires the `argon2-cffi` package and JWT support requires
-    `PyJWT`. Both are installed automatically as dependencies of tortoise-auth.
+    Argon2 hashing requires the `argon2-cffi` package, which is installed
+    automatically as a dependency of tortoise-auth.
 
 ## Next Steps
 

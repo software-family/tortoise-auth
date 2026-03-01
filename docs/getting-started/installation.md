@@ -37,7 +37,6 @@ You do **not** need to install them separately.
 |---------------------------|------------------------------------------------------------------------------------------------------|
 | `tortoise-orm` >=0.21    | Async ORM built on top of `asyncio`. Provides the model layer that `tortoise-auth` extends.          |
 | `pwdlib[argon2,bcrypt]` >=0.2 | Password hashing library. Includes the **Argon2** and **bcrypt** backends out of the box.       |
-| `PyJWT` >=2.8            | Encoding and decoding of JSON Web Tokens (JWT) for stateless authentication.                         |
 | `pyotp` >=2.9            | One-time password generation and verification for TOTP-based two-factor authentication.              |
 | `qrcode[pil]` >=7.4      | QR code generation used when setting up TOTP with authenticator apps.                                |
 

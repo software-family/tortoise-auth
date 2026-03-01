@@ -141,7 +141,7 @@ class TestConvenienceFunctions:
     def test_uses_config_secret(self):
         from tortoise_auth.config import AuthConfig, configure
 
-        configure(AuthConfig(jwt_secret="config-secret"))
+        configure(AuthConfig(signing_secret="config-secret"))
         try:
             token = make_token("value")
             assert verify_token(token) == "value"

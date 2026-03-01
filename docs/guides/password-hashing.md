@@ -150,7 +150,6 @@ from tortoise_auth import AuthConfig, configure
 
 configure(AuthConfig(
     user_model="models.User",
-    jwt_secret="your-secret-key",
 
     # Increase Argon2 cost for high-security environments
     argon2_time_cost=4,
@@ -161,12 +160,6 @@ configure(AuthConfig(
     bcrypt_rounds=12,
     pbkdf2_iterations=600_000,
 ))
-```
-
-!!! warning "Do not hardcode secrets"
-    The snippet above uses a literal `jwt_secret` for brevity. In production,
-    always load secrets from environment variables or a dedicated secrets
-    manager.
 
 When you change the Argon2 parameters, existing Argon2 hashes that were created
 with the old parameters will be detected as needing a re-hash (via

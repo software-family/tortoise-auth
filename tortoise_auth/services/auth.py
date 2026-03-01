@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from tortoise import Tortoise
 from tortoise.timezone import now as tz_now
+from tortoise.transactions import in_transaction
 
 from tortoise_auth.config import AuthConfig, get_config
 from tortoise_auth.events import emit
 from tortoise_auth.exceptions import AuthenticationError
 from tortoise_auth.tokens import AuthResult, TokenBackend, TokenPair
+
+# Pre-computed Argon2 hash of a dummy value, used to equalize timing
+# when a user is not found (prevents user-enumeration via timing).
+_DUMMY_HASH: str | None = None
 
 
 class AuthService:
@@ -33,14 +39,10 @@ class AuthService:
     def backend(self) -> TokenBackend:
         if self._backend is not None:
             return self._backend
-        cfg = self.config
-        if cfg.token_backend == "database":
-            from tortoise_auth.tokens.database import DatabaseTokenBackend
-
-            return DatabaseTokenBackend(cfg)
         from tortoise_auth.tokens.jwt import JWTBackend
 
-        return JWTBackend(cfg)
+        self._backend = JWTBackend(self.config)
+        return self._backend
 
     async def login(
         self, identifier: str, password: str, **extra_claims: Any
@@ -50,10 +52,12 @@ class AuthService:
         user = await user_model.filter(email=identifier).first()
 
         if user is None:
+            self._dummy_verify(password)
             await emit("user_login_failed", identifier=identifier, reason="not_found")
             raise AuthenticationError("Invalid credentials")
 
         if not user.is_active:
+            self._dummy_verify(password)
             await emit("user_login_failed", identifier=identifier, reason="inactive")
             raise AuthenticationError("Invalid credentials")
 
@@ -87,10 +91,13 @@ class AuthService:
         return user
 
     async def refresh(self, refresh_token: str) -> TokenPair:
-        """Verify a refresh token and issue new tokens."""
-        payload = await self.backend.verify_token(refresh_token, token_type="refresh")
-        await self.backend.revoke_token(refresh_token)
-        return await self.backend.create_tokens(payload.sub)
+        """Verify a refresh token and issue new tokens (atomic)."""
+        async with in_transaction():
+            payload = await self.backend.verify_token(
+                refresh_token, token_type="refresh"
+            )
+            await self.backend.revoke_token(refresh_token)
+            return await self.backend.create_tokens(payload.sub)
 
     async def logout(self, token: str) -> None:
         """Revoke a single token."""
@@ -115,6 +122,15 @@ class AuthService:
                 await emit("user_logout", user)
         except Exception:
             pass
+
+    def _dummy_verify(self, password: str) -> None:
+        """Verify password against a dummy hash to prevent timing-based user enumeration."""
+        global _DUMMY_HASH
+        ph = self.config.get_password_hash()
+        if _DUMMY_HASH is None:
+            _DUMMY_HASH = ph.hash("dummy-password-for-timing")
+        with contextlib.suppress(Exception):
+            ph.verify(password, _DUMMY_HASH)
 
     def _resolve_user_model(self) -> Any:
         """Resolve the user model class from Tortoise registry."""
