@@ -1,0 +1,59 @@
+site_name: tortoise-auth
+site_description: Async authentication and user management for Tortoise ORM
+site_url: https://elie.github.io/tortoise-auth
+repo_url: https://github.com/elie/tortoise-auth
+repo_name: elie/tortoise-auth
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - Guides:
+      - User Model: guides/user-model.md
+      - Configuration: guides/configuration.md
+      - Authentication: guides/authentication.md
+      - Token Backends: guides/token-backends.md
+      - Password Hashing: guides/password-hashing.md
+      - Password Validation: guides/password-validation.md
+      - Signing: guides/signing.md
+      - Events: guides/events.md
+  - Reference:
+      - API Reference: reference/api.md
+      - Exceptions: reference/exceptions.md
+      - Configuration Options: reference/configuration-options.md
+  - Roadmap: roadmap.md
