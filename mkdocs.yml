@@ -1,7 +1,7 @@
 site_name: tortoise-auth
 site_description: Async authentication and user management for Tortoise ORM
-site_url: https://elie.github.io/tortoise-auth
-repo_url: https://github.com/elie/tortoise-auth
+site_url: https://tortoise-auth.softwarefamily.fr/
+repo_url: https://github.com/software-family/tortoise-auth
 repo_name: elie/tortoise-auth
 
 theme:
