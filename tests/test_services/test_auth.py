@@ -23,7 +23,7 @@ def make_config(**overrides: object) -> AuthConfig:
         user_model="models.MinimalUser",
         access_token_lifetime=900,
         refresh_token_lifetime=604_800,
-        jwt_secret="test-secret-key",
+        jwt_secret="test-secret-key-that-is-at-least-32-bytes!",
         jwt_blacklist_enabled=True,
         **overrides,
     )

@@ -364,3 +364,5 @@ Now that you have the basics working, explore these guides to go further:
   rules before `set_password()`.
 - **[Events](../guides/events.md)** -- react to `user_login`, `password_changed`, and other
   lifecycle events.
+- **[Starlette Integration](../integrations/starlette.md)** -- plug `tortoise-auth` into a
+  Starlette application with middleware, decorators, and route helpers.

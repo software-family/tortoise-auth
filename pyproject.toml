@@ -1,6 +1,6 @@
 [project]
 name = "tortoise-auth"
-version = "0.1.0"
+version = "0.2.0"
 description = "Async authentication and user management for Tortoise ORM. Framework-agnostic, extensible, secure by default."
 requires-python = ">=3.12"
 license = "MIT"
@@ -27,6 +27,9 @@ dependencies = [
     "qrcode[pil]>=7.4",
 ]
 
+[project.optional-dependencies]
+starlette = ["starlette>=0.27"]
+
 [project.urls]
 Homepage = "https://github.com/elie/tortoise-auth"
 Documentation = "https://elie.github.io/tortoise-auth"
@@ -48,6 +51,8 @@ dev = [
     "mypy>=1.10",
     "ruff>=0.5",
     "aiosqlite>=0.20",
+    "httpx>=0.25",
+    "starlette>=0.27",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -106,4 +111,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "jwt.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "starlette.*"
 ignore_missing_imports = true

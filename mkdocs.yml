@@ -52,6 +52,8 @@ nav:
       - Password Validation: guides/password-validation.md
       - Signing: guides/signing.md
       - Events: guides/events.md
+  - Integrations:
+      - Starlette: integrations/starlette.md
   - Reference:
       - API Reference: reference/api.md
       - Exceptions: reference/exceptions.md
