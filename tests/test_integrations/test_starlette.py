@@ -1,6 +1,5 @@
 """Tests for the Starlette integration."""
 
-import pytest
 from starlette.applications import Starlette
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
@@ -10,7 +9,6 @@ from starlette.testclient import TestClient
 
 from tests.models import MinimalUser
 from tortoise_auth.config import AuthConfig
-from tortoise_auth.exceptions import AuthenticationError
 from tortoise_auth.integrations.starlette import (
     AnonymousUser,
     TokenAuthBackend,
@@ -105,7 +103,7 @@ class TestAnonymousUser:
 
 class TestTokenAuthBackend:
     async def test_authenticated_request(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")
@@ -167,7 +165,7 @@ class TestTokenAuthBackend:
         assert data["is_authenticated"] is False
 
     async def test_custom_scopes(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")
@@ -187,7 +185,7 @@ class TestTokenAuthBackend:
 
 class TestLoginRequired:
     async def test_authenticated_passes_through(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")
@@ -259,7 +257,7 @@ class TestLoginRequired:
 
 class TestRequireAuth:
     async def test_returns_user_when_authenticated(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")

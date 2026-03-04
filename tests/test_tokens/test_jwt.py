@@ -319,17 +319,20 @@ class TestJWTBackendSecretFallback:
         backend = JWTBackend(cfg)
         pair = await backend.create_tokens("42")
         # Verify the token was signed with the signing_secret
-        payload = jwt.decode(pair.access_token, "fallback-secret-that-is-at-least-32b", algorithms=["HS256"])
+        secret = "fallback-secret-that-is-at-least-32b"
+        payload = jwt.decode(pair.access_token, secret, algorithms=["HS256"])
         assert payload["sub"] == "42"
 
     async def test_jwt_secret_takes_precedence(self):
-        cfg = AuthConfig(jwt_secret="jwt-secret-that-is-at-least-32-bytes!", signing_secret="signing-secret-at-least-32-bytes!!")
+        jwt_secret = "jwt-secret-that-is-at-least-32-bytes!"
+        signing_secret = "signing-secret-at-least-32-bytes!!"
+        cfg = AuthConfig(jwt_secret=jwt_secret, signing_secret=signing_secret)
         backend = JWTBackend(cfg)
         pair = await backend.create_tokens("42")
-        payload = jwt.decode(pair.access_token, "jwt-secret-that-is-at-least-32-bytes!", algorithms=["HS256"])
+        payload = jwt.decode(pair.access_token, jwt_secret, algorithms=["HS256"])
         assert payload["sub"] == "42"
         with pytest.raises(jwt.InvalidSignatureError):
-            jwt.decode(pair.access_token, "signing-secret-at-least-32-bytes!!", algorithms=["HS256"])
+            jwt.decode(pair.access_token, signing_secret, algorithms=["HS256"])
 
 
 class TestJWTBackendWithAuthService:

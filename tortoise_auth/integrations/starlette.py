@@ -16,12 +16,15 @@ Usage::
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from starlette.authentication import AuthCredentials, AuthenticationBackend
-from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from starlette.requests import HTTPConnection, Request
 
 from tortoise_auth.exceptions import AuthenticationError, TokenError
 from tortoise_auth.services import AuthService

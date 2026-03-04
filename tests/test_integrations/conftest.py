@@ -1,5 +1,3 @@
-import tempfile
-
 import pytest
 from tortoise import Tortoise
 
