@@ -70,9 +70,7 @@ class TokenAuthBackend(AuthenticationBackend):
             self._auth_service = AuthService()
         return self._auth_service
 
-    async def authenticate(
-        self, conn: HTTPConnection
-    ) -> tuple[AuthCredentials, Any]:
+    async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, Any]:
         anonymous = (AuthCredentials([]), AnonymousUser())
 
         authorization = conn.headers.get("Authorization")

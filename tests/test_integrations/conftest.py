@@ -1,8 +1,14 @@
-import pytest
+import os
+import threading
+
+import pytest_asyncio
 from tortoise import Tortoise
+from tortoise.context import tortoise_test_context
+
+_exit_code = 0
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def init_db(tmp_path):
     """Override the root init_db to use a file-based SQLite database.
 
@@ -13,15 +19,33 @@ async def init_db(tmp_path):
     survives the reconnection.
     """
     db_path = tmp_path / "test.db"
-    await Tortoise.init(
+    async with tortoise_test_context(
+        modules=[
+            "tests.models",
+            "tortoise_auth.models.jwt_blacklist",
+        ],
         db_url=f"sqlite://{db_path}",
-        modules={
-            "models": [
-                "tests.models",
-                "tortoise_auth.models.jwt_blacklist",
-            ]
-        },
-    )
-    await Tortoise.generate_schemas()
-    yield
+    ) as ctx:
+        yield ctx
     await Tortoise.close_connections()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    global _exit_code
+    _exit_code = exitstatus
+
+
+def pytest_unconfigure(config):
+    """Force-exit if orphaned aiosqlite threads prevent clean shutdown.
+
+    Starlette's TestClient triggers Tortoise reconnection across event loops,
+    leaving non-daemon aiosqlite worker threads that can't be cleanly closed.
+    See: https://github.com/pytest-dev/pytest/issues/7250
+    """
+    stale = [
+        t
+        for t in threading.enumerate()
+        if t is not threading.main_thread() and not t.daemon and t.is_alive()
+    ]
+    if stale:
+        os._exit(_exit_code)

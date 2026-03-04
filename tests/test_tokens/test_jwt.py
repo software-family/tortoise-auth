@@ -73,7 +73,10 @@ class TestJWTBackendCreateTokens:
         backend = JWTBackend(make_config(jwt_issuer="myapp"))
         pair = await backend.create_tokens("42")
         payload = jwt.decode(
-            pair.access_token, SECRET, algorithms=["HS256"], issuer="myapp",
+            pair.access_token,
+            SECRET,
+            algorithms=["HS256"],
+            issuer="myapp",
             options={"verify_aud": False},
         )
         assert payload["iss"] == "myapp"
@@ -82,7 +85,10 @@ class TestJWTBackendCreateTokens:
         backend = JWTBackend(make_config(jwt_audience="myapi"))
         pair = await backend.create_tokens("42")
         payload = jwt.decode(
-            pair.access_token, SECRET, algorithms=["HS256"], audience="myapi",
+            pair.access_token,
+            SECRET,
+            algorithms=["HS256"],
+            audience="myapi",
         )
         assert payload["aud"] == "myapi"
 
@@ -239,9 +245,12 @@ class TestJWTBackendBlacklist:
         pair = await backend.create_tokens("42")
         await backend.revoke_token(pair.access_token)
         await backend.revoke_token(pair.access_token)  # Should not raise
-        assert await BlacklistedToken.filter(
-            jti=jwt.decode(pair.access_token, SECRET, algorithms=["HS256"])["jti"]
-        ).count() == 1
+        assert (
+            await BlacklistedToken.filter(
+                jti=jwt.decode(pair.access_token, SECRET, algorithms=["HS256"])["jti"]
+            ).count()
+            == 1
+        )
 
     async def test_outstanding_tokens_created(self):
         backend = JWTBackend(make_blacklist_config())

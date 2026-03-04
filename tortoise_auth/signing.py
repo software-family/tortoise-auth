@@ -52,15 +52,15 @@ class TimestampSigner(Signer):
 
     def sign_with_timestamp(self, value: str) -> str:
         """Sign a value with an embedded timestamp."""
-        timestamp = base64.urlsafe_b64encode(
-            str(int(time.time())).encode("ascii")
-        ).rstrip(b"=").decode("ascii")
+        timestamp = (
+            base64.urlsafe_b64encode(str(int(time.time())).encode("ascii"))
+            .rstrip(b"=")
+            .decode("ascii")
+        )
         value_with_ts = f"{value}{self._separator}{timestamp}"
         return super().sign(value_with_ts)
 
-    def unsign_with_timestamp(
-        self, signed_value: str, *, max_age: int | None = None
-    ) -> str:
+    def unsign_with_timestamp(self, signed_value: str, *, max_age: int | None = None) -> str:
         """Verify signature and optionally check expiration."""
         value_with_ts = super().unsign(signed_value)
         if self._separator not in value_with_ts:

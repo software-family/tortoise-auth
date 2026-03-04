@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Async authentication and user management for Tortoise ORM. Framework-agnostic, extensible, secure by default."
 requires-python = ">=3.12"
 license = "MIT"
-authors = [{ name = "Elie" }]
+authors = [{ name = "Elie Terrien" }]
 keywords = ["tortoise-orm", "authentication", "auth", "async", "user-management", "totp", "2fa", "api-keys"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -21,7 +21,6 @@ dependencies = [
     "tortoise-orm>=1.0.0",
     "pwdlib[argon2,bcrypt]>=0.2.0",
     "PyJWT>=2.9.0",
-
     "pyotp>=2.8.0",
     "qrcode[pil]>=7.0.0",
 ]
@@ -31,9 +30,9 @@ starlette = ["starlette>=0.52.1"]
 
 [project.urls]
 Homepage = "https://github.com/elie/tortoise-auth"
-Documentation = "https://elie.github.io/tortoise-auth"
-Repository = "https://github.com/elie/tortoise-auth"
-Issues = "https://github.com/elie/tortoise-auth/issues"
+Documentation = "https://tortoise-auth.softwarefamily.fr/"
+Repository = "https://github.com/software-family/tortoise-auth/"
+Issues = "https://github.com/software-family/tortoise-auth/issues"
 
 [build-system]
 requires = ["hatchling"]
@@ -60,8 +59,9 @@ docs = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "-v --tb=short --strict-markers"
+addopts = "-vv --tb=short --strict-markers"
 markers = [
     "slow: marks tests as slow",
 ]

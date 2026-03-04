@@ -73,32 +73,32 @@ class JWTBackend:
             from tortoise_auth.models.jwt_blacklist import OutstandingToken
 
             now_dt = datetime.fromtimestamp(now, tz=UTC)
-            await OutstandingToken.bulk_create([
-                OutstandingToken(
-                    jti=access_jti,
-                    user_id=user_id,
-                    token_type="access",
-                    created_at=now_dt,
-                    expires_at=datetime.fromtimestamp(
-                        now_int + cfg.access_token_lifetime, tz=UTC
+            await OutstandingToken.bulk_create(
+                [
+                    OutstandingToken(
+                        jti=access_jti,
+                        user_id=user_id,
+                        token_type="access",
+                        created_at=now_dt,
+                        expires_at=datetime.fromtimestamp(
+                            now_int + cfg.access_token_lifetime, tz=UTC
+                        ),
                     ),
-                ),
-                OutstandingToken(
-                    jti=refresh_jti,
-                    user_id=user_id,
-                    token_type="refresh",
-                    created_at=now_dt,
-                    expires_at=datetime.fromtimestamp(
-                        now_int + cfg.refresh_token_lifetime, tz=UTC
+                    OutstandingToken(
+                        jti=refresh_jti,
+                        user_id=user_id,
+                        token_type="refresh",
+                        created_at=now_dt,
+                        expires_at=datetime.fromtimestamp(
+                            now_int + cfg.refresh_token_lifetime, tz=UTC
+                        ),
                     ),
-                ),
-            ])
+                ]
+            )
 
         return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
-    async def verify_token(
-        self, token: str, *, token_type: str = "access"
-    ) -> TokenPayload:
+    async def verify_token(self, token: str, *, token_type: str = "access") -> TokenPayload:
         """Decode and verify a JWT token."""
         if token_type not in ("access", "refresh"):
             raise TokenInvalidError(f"Unknown token type: {token_type!r}")
@@ -175,12 +175,8 @@ class JWTBackend:
         if not jtis:
             return
 
-        existing = set(
-            await BlacklistedToken.filter(jti__in=jtis).values_list("jti", flat=True)
-        )
-        new_entries = [
-            BlacklistedToken(jti=jti) for jti in jtis if jti not in existing
-        ]
+        existing = set(await BlacklistedToken.filter(jti__in=jtis).values_list("jti", flat=True))
+        new_entries = [BlacklistedToken(jti=jti) for jti in jtis if jti not in existing]
         if new_entries:
             await BlacklistedToken.bulk_create(new_entries)
 

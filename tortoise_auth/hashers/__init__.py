@@ -24,15 +24,17 @@ def default_password_hash(
 
     Argon2 is the primary hasher; Bcrypt and PBKDF2 are kept for migration.
     """
-    return PasswordHash([
-        _argon2_default(
-            time_cost=argon2_time_cost,
-            memory_cost=argon2_memory_cost,
-            parallelism=argon2_parallelism,
-        ),
-        _bcrypt_default(rounds=bcrypt_rounds),
-        PBKDF2Hasher(iterations=pbkdf2_iterations),
-    ])
+    return PasswordHash(
+        [
+            _argon2_default(
+                time_cost=argon2_time_cost,
+                memory_cost=argon2_memory_cost,
+                parallelism=argon2_parallelism,
+            ),
+            _bcrypt_default(rounds=bcrypt_rounds),
+            PBKDF2Hasher(iterations=pbkdf2_iterations),
+        ]
+    )
 
 
 def make_password(password: str) -> str:
