@@ -16,12 +16,15 @@ Usage::
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from starlette.authentication import AuthCredentials, AuthenticationBackend
-from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from starlette.requests import HTTPConnection, Request
 
 from tortoise_auth.exceptions import AuthenticationError, TokenError
 from tortoise_auth.services import AuthService
@@ -67,9 +70,7 @@ class TokenAuthBackend(AuthenticationBackend):
             self._auth_service = AuthService()
         return self._auth_service
 
-    async def authenticate(
-        self, conn: HTTPConnection
-    ) -> tuple[AuthCredentials, Any]:
+    async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, Any]:
         anonymous = (AuthCredentials([]), AnonymousUser())
 
         authorization = conn.headers.get("Authorization")
@@ -116,8 +117,10 @@ def login_required(
         @login_required
         async def view(request): ...
 
+
         @login_required(status_code=403)
         async def admin_view(request): ...
+
 
         @login_required(redirect_url="/login")
         async def html_view(request): ...

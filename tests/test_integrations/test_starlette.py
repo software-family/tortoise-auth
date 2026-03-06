@@ -1,4 +1,4 @@
-"""Tests for the Starlette integration."""
+from contextlib import asynccontextmanager
 
 import pytest
 from starlette.applications import Starlette
@@ -7,10 +7,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
+from tortoise import Tortoise
 
 from tests.models import MinimalUser
+from tortoise_auth import AuthenticationError
 from tortoise_auth.config import AuthConfig
-from tortoise_auth.exceptions import AuthenticationError
 from tortoise_auth.integrations.starlette import (
     AnonymousUser,
     TokenAuthBackend,
@@ -43,11 +44,13 @@ def make_app(backend: TokenAuthBackend | None = None) -> Starlette:
     """Minimal Starlette app with AuthenticationMiddleware for testing."""
 
     async def user_info(request: Request) -> JSONResponse:
-        return JSONResponse({
-            "is_authenticated": request.user.is_authenticated,
-            "is_anonymous": request.user.is_anonymous,
-            "scopes": list(request.auth.scopes),
-        })
+        return JSONResponse(
+            {
+                "is_authenticated": request.user.is_authenticated,
+                "is_anonymous": request.user.is_anonymous,
+                "scopes": list(request.auth.scopes),
+            }
+        )
 
     async def protected(request: Request) -> JSONResponse:
         return JSONResponse({"email": request.user.email})
@@ -72,6 +75,11 @@ def make_app(backend: TokenAuthBackend | None = None) -> Starlette:
         user = require_auth(request)
         return JSONResponse({"email": user.email})
 
+    @asynccontextmanager
+    async def lifespan(app):
+        yield
+        await Tortoise.close_connections()
+
     app = Starlette(
         routes=[
             Route("/user-info", user_info),
@@ -82,7 +90,9 @@ def make_app(backend: TokenAuthBackend | None = None) -> Starlette:
             Route("/decorated-redirect", decorated_redirect),
             Route("/require-auth", require_auth_route),
         ],
+        lifespan=lifespan,
     )
+
     if backend is None:
         backend = TokenAuthBackend()
     app.add_middleware(AuthenticationMiddleware, backend=backend)
@@ -103,21 +113,21 @@ class TestAnonymousUser:
         assert user.display_name == ""
 
 
+@pytest.mark.asyncio
 class TestTokenAuthBackend:
     async def test_authenticated_request(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")
 
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get(
-            "/user-info",
-            headers={"Authorization": f"Bearer {result.access_token}"},
-        )
+        with TestClient(app) as client:
+            resp = client.get(
+                "/user-info",
+                headers={"Authorization": f"Bearer {result.access_token}"},
+            )
         assert resp.status_code == 200
         data = resp.json()
         assert data["is_authenticated"] is True
@@ -129,9 +139,8 @@ class TestTokenAuthBackend:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get("/user-info")
+        with TestClient(app) as client:
+            resp = client.get("/user-info")
         assert resp.status_code == 200
         data = resp.json()
         assert data["is_authenticated"] is False
@@ -141,12 +150,11 @@ class TestTokenAuthBackend:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get(
-            "/user-info",
-            headers={"Authorization": "Bearer invalid-token"},
-        )
+        with TestClient(app) as client:
+            resp = client.get(
+                "/user-info",
+                headers={"Authorization": "Bearer invalid-token"},
+            )
         assert resp.status_code == 200
         data = resp.json()
         assert data["is_authenticated"] is False
@@ -156,50 +164,48 @@ class TestTokenAuthBackend:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get(
-            "/user-info",
-            headers={"Authorization": "Basic dXNlcjpwYXNz"},
-        )
+        with TestClient(app) as client:
+            resp = client.get(
+                "/user-info",
+                headers={"Authorization": "Basic dXNlcjpwYXNz"},
+            )
         assert resp.status_code == 200
         data = resp.json()
         assert data["is_authenticated"] is False
 
     async def test_custom_scopes(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")
 
         backend = TokenAuthBackend(auth_service=svc, scopes=("admin", "write"))
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get(
-            "/user-info",
-            headers={"Authorization": f"Bearer {result.access_token}"},
-        )
+        with TestClient(app) as client:
+            resp = client.get(
+                "/user-info",
+                headers={"Authorization": f"Bearer {result.access_token}"},
+            )
         assert resp.status_code == 200
         data = resp.json()
         assert set(data["scopes"]) == {"admin", "write"}
 
 
+@pytest.mark.asyncio
 class TestLoginRequired:
     async def test_authenticated_passes_through(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")
 
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get(
-            "/decorated-no-parens",
-            headers={"Authorization": f"Bearer {result.access_token}"},
-        )
+        with TestClient(app) as client:
+            resp = client.get(
+                "/decorated-no-parens",
+                headers={"Authorization": f"Bearer {result.access_token}"},
+            )
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
 
@@ -208,9 +214,8 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get("/decorated-no-parens")
+        with TestClient(app) as client:
+            resp = client.get("/decorated-no-parens")
         assert resp.status_code == 401
         assert resp.json() == {"detail": "Authentication required"}
 
@@ -219,9 +224,8 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get("/decorated-403")
+        with TestClient(app) as client:
+            resp = client.get("/decorated-403")
         assert resp.status_code == 403
         assert resp.json() == {"detail": "Authentication required"}
 
@@ -230,9 +234,8 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app, follow_redirects=False)
-
-        resp = client.get("/decorated-redirect")
+        with TestClient(app, follow_redirects=False) as client:
+            resp = client.get("/decorated-redirect")
         assert resp.status_code == 302
         assert resp.headers["location"] == "/login"
 
@@ -241,9 +244,8 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get("/decorated-with-parens")
+        with TestClient(app) as client:
+            resp = client.get("/decorated-with-parens")
         assert resp.status_code == 401
 
     async def test_works_without_parentheses(self):
@@ -251,27 +253,26 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get("/decorated-no-parens")
+        with TestClient(app) as client:
+            resp = client.get("/decorated-no-parens")
         assert resp.status_code == 401
 
 
+@pytest.mark.asyncio
 class TestRequireAuth:
     async def test_returns_user_when_authenticated(self):
-        user = await _create_user()
+        await _create_user()
         cfg = make_config()
         svc = AuthService(cfg)
         result = await svc.login("user@example.com", "Str0ngP@ss!")
 
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app)
-
-        resp = client.get(
-            "/require-auth",
-            headers={"Authorization": f"Bearer {result.access_token}"},
-        )
+        with TestClient(app) as client:
+            resp = client.get(
+                "/require-auth",
+                headers={"Authorization": f"Bearer {result.access_token}"},
+            )
         assert resp.status_code == 200
         assert resp.json() == {"email": "user@example.com"}
 
@@ -280,7 +281,5 @@ class TestRequireAuth:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        client = TestClient(app, raise_server_exceptions=False)
-
-        resp = client.get("/require-auth")
-        assert resp.status_code == 500
+        with pytest.raises(AuthenticationError), TestClient(app) as client:
+            client.get("/require-auth")

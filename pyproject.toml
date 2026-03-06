@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Async authentication and user management for Tortoise ORM. Framework-agnostic, extensible, secure by default."
 requires-python = ">=3.12"
 license = "MIT"
-authors = [{ name = "Elie" }]
+authors = [{ name = "Elie Terrien" }]
 keywords = ["tortoise-orm", "authentication", "auth", "async", "user-management", "totp", "2fa", "api-keys"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -14,27 +14,25 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Topic :: Security",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
 dependencies = [
-    "tortoise-orm>=0.21",
-    "pwdlib[argon2,bcrypt]>=0.2",
-    "PyJWT>=2.8",
-
-    "pyotp>=2.9",
-    "qrcode[pil]>=7.4",
+    "tortoise-orm>=1.0.0",
+    "pwdlib[argon2,bcrypt]>=0.2.0",
+    "PyJWT>=2.9.0",
+    "pyotp>=2.8.0",
+    "qrcode[pil]>=7.0.0",
 ]
 
 [project.optional-dependencies]
-starlette = ["starlette>=0.27"]
+starlette = ["starlette>=0.52.1"]
 
 [project.urls]
 Homepage = "https://github.com/elie/tortoise-auth"
-Documentation = "https://elie.github.io/tortoise-auth"
-Repository = "https://github.com/elie/tortoise-auth"
-Issues = "https://github.com/elie/tortoise-auth/issues"
+Documentation = "https://tortoise-auth.softwarefamily.fr/"
+Repository = "https://github.com/software-family/tortoise-auth/"
+Issues = "https://github.com/software-family/tortoise-auth/issues"
 
 [build-system]
 requires = ["hatchling"]
@@ -55,14 +53,15 @@ dev = [
     "starlette>=0.27",
 ]
 docs = [
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.7.4",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "-v --tb=short --strict-markers"
+addopts = "-vv --tb=short --strict-markers"
 markers = [
     "slow: marks tests as slow",
 ]
@@ -70,6 +69,7 @@ markers = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+fix = true
 
 [tool.ruff.lint]
 select = [
@@ -86,6 +86,10 @@ select = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["tortoise_auth"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 100
 
 [tool.mypy]
 python_version = "3.12"

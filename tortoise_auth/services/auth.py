@@ -44,9 +44,7 @@ class AuthService:
         self._backend = JWTBackend(self.config)
         return self._backend
 
-    async def login(
-        self, identifier: str, password: str, **extra_claims: Any
-    ) -> AuthResult:
+    async def login(self, identifier: str, password: str, **extra_claims: Any) -> AuthResult:
         """Authenticate a user by email and password, returning tokens."""
         user_model = self._resolve_user_model()
         user = await user_model.filter(email=identifier).first()
@@ -93,9 +91,7 @@ class AuthService:
     async def refresh(self, refresh_token: str) -> TokenPair:
         """Verify a refresh token and issue new tokens (atomic)."""
         async with in_transaction():
-            payload = await self.backend.verify_token(
-                refresh_token, token_type="refresh"
-            )
+            payload = await self.backend.verify_token(refresh_token, token_type="refresh")
             await self.backend.revoke_token(refresh_token)
             return await self.backend.create_tokens(payload.sub)
 
@@ -136,9 +132,7 @@ class AuthService:
         """Resolve the user model class from Tortoise registry."""
         model_path = self.config.user_model
         if not model_path:
-            raise AuthenticationError(
-                "user_model not configured — set it via AuthConfig"
-            )
+            raise AuthenticationError("user_model not configured — set it via AuthConfig")
         if "." not in model_path:
             raise AuthenticationError(f"Invalid user_model format: {model_path!r}")
 

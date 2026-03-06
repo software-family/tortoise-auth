@@ -27,7 +27,6 @@ class TestAuthConfigValidation:
             cfg.validate()
 
 
-
 class TestAuthConfigJWTDefaults:
     def test_jwt_secret_default(self):
         cfg = AuthConfig()

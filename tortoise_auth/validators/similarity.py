@@ -37,9 +37,7 @@ class UserAttributeSimilarityValidator:
                     continue
                 ratio = difflib.SequenceMatcher(None, password_lower, val_lower).quick_ratio()
                 if ratio >= self.max_similarity:
-                    raise ValueError(
-                        f"The password is too similar to the {attr_name}."
-                    )
+                    raise ValueError(f"The password is too similar to the {attr_name}.")
 
     def get_help_text(self) -> str:
         return "Your password can't be too similar to your other personal information."

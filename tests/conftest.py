@@ -1,19 +1,15 @@
-import pytest
-from tortoise import Tortoise
+import pytest_asyncio
+from tortoise.context import tortoise_test_context
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def init_db():
     """Initialize an in-memory SQLite database for each test."""
-    await Tortoise.init(
+    async with tortoise_test_context(
+        modules=[
+            "tests.models",
+            "tortoise_auth.models.jwt_blacklist",
+        ],
         db_url="sqlite://:memory:",
-        modules={
-            "models": [
-                "tests.models",
-                "tortoise_auth.models.jwt_blacklist",
-            ]
-        },
-    )
-    await Tortoise.generate_schemas()
-    yield
-    await Tortoise.close_connections()
+    ) as ctx:
+        yield ctx
