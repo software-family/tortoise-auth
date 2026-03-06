@@ -117,8 +117,10 @@ def login_required(
         @login_required
         async def view(request): ...
 
+
         @login_required(status_code=403)
         async def admin_view(request): ...
+
 
         @login_required(redirect_url="/login")
         async def html_view(request): ...

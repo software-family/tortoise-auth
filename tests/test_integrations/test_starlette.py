@@ -93,8 +93,6 @@ def make_app(backend: TokenAuthBackend | None = None) -> Starlette:
         lifespan=lifespan,
     )
 
-
-
     if backend is None:
         backend = TokenAuthBackend()
     app.add_middleware(AuthenticationMiddleware, backend=backend)
@@ -192,6 +190,7 @@ class TestTokenAuthBackend:
         data = resp.json()
         assert set(data["scopes"]) == {"admin", "write"}
 
+
 @pytest.mark.asyncio
 class TestLoginRequired:
     async def test_authenticated_passes_through(self):
@@ -257,6 +256,7 @@ class TestLoginRequired:
         with TestClient(app) as client:
             resp = client.get("/decorated-no-parens")
         assert resp.status_code == 401
+
 
 @pytest.mark.asyncio
 class TestRequireAuth:

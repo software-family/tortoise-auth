@@ -2,7 +2,7 @@ import pytest_asyncio
 from tortoise.context import tortoise_test_context
 
 
-@pytest_asyncio.fixture(scope="function",  autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def init_db():
     """Initialize an in-memory SQLite database for each test."""
     async with tortoise_test_context(
