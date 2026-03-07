@@ -1,13 +1,10 @@
-from contextlib import asynccontextmanager
-
 import pytest
+from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-from starlette.testclient import TestClient
-from tortoise import Tortoise
 
 from tests.models import MinimalUser
 from tortoise_auth import AuthenticationError
@@ -75,11 +72,6 @@ def make_app(backend: TokenAuthBackend | None = None) -> Starlette:
         user = require_auth(request)
         return JSONResponse({"email": user.email})
 
-    @asynccontextmanager
-    async def lifespan(app):
-        yield
-        await Tortoise.close_connections()
-
     app = Starlette(
         routes=[
             Route("/user-info", user_info),
@@ -90,13 +82,19 @@ def make_app(backend: TokenAuthBackend | None = None) -> Starlette:
             Route("/decorated-redirect", decorated_redirect),
             Route("/require-auth", require_auth_route),
         ],
-        lifespan=lifespan,
     )
 
     if backend is None:
         backend = TokenAuthBackend()
     app.add_middleware(AuthenticationMiddleware, backend=backend)
     return app
+
+
+def _client(app: Starlette, **kwargs) -> AsyncClient:
+    return AsyncClient(
+        transport=ASGITransport(app=app, **kwargs),
+        base_url="http://test",
+    )
 
 
 class TestAnonymousUser:
@@ -113,7 +111,6 @@ class TestAnonymousUser:
         assert user.display_name == ""
 
 
-@pytest.mark.asyncio
 class TestTokenAuthBackend:
     async def test_authenticated_request(self):
         await _create_user()
@@ -123,8 +120,8 @@ class TestTokenAuthBackend:
 
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get(
+        async with _client(app) as client:
+            resp = await client.get(
                 "/user-info",
                 headers={"Authorization": f"Bearer {result.access_token}"},
             )
@@ -139,8 +136,8 @@ class TestTokenAuthBackend:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get("/user-info")
+        async with _client(app) as client:
+            resp = await client.get("/user-info")
         assert resp.status_code == 200
         data = resp.json()
         assert data["is_authenticated"] is False
@@ -150,8 +147,8 @@ class TestTokenAuthBackend:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get(
+        async with _client(app) as client:
+            resp = await client.get(
                 "/user-info",
                 headers={"Authorization": "Bearer invalid-token"},
             )
@@ -164,8 +161,8 @@ class TestTokenAuthBackend:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get(
+        async with _client(app) as client:
+            resp = await client.get(
                 "/user-info",
                 headers={"Authorization": "Basic dXNlcjpwYXNz"},
             )
@@ -181,8 +178,8 @@ class TestTokenAuthBackend:
 
         backend = TokenAuthBackend(auth_service=svc, scopes=("admin", "write"))
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get(
+        async with _client(app) as client:
+            resp = await client.get(
                 "/user-info",
                 headers={"Authorization": f"Bearer {result.access_token}"},
             )
@@ -191,7 +188,6 @@ class TestTokenAuthBackend:
         assert set(data["scopes"]) == {"admin", "write"}
 
 
-@pytest.mark.asyncio
 class TestLoginRequired:
     async def test_authenticated_passes_through(self):
         await _create_user()
@@ -201,8 +197,8 @@ class TestLoginRequired:
 
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get(
+        async with _client(app) as client:
+            resp = await client.get(
                 "/decorated-no-parens",
                 headers={"Authorization": f"Bearer {result.access_token}"},
             )
@@ -214,8 +210,8 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get("/decorated-no-parens")
+        async with _client(app) as client:
+            resp = await client.get("/decorated-no-parens")
         assert resp.status_code == 401
         assert resp.json() == {"detail": "Authentication required"}
 
@@ -224,8 +220,8 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get("/decorated-403")
+        async with _client(app) as client:
+            resp = await client.get("/decorated-403")
         assert resp.status_code == 403
         assert resp.json() == {"detail": "Authentication required"}
 
@@ -234,8 +230,12 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app, follow_redirects=False) as client:
-            resp = client.get("/decorated-redirect")
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            follow_redirects=False,
+        ) as client:
+            resp = await client.get("/decorated-redirect")
         assert resp.status_code == 302
         assert resp.headers["location"] == "/login"
 
@@ -244,8 +244,8 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get("/decorated-with-parens")
+        async with _client(app) as client:
+            resp = await client.get("/decorated-with-parens")
         assert resp.status_code == 401
 
     async def test_works_without_parentheses(self):
@@ -253,12 +253,11 @@ class TestLoginRequired:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get("/decorated-no-parens")
+        async with _client(app) as client:
+            resp = await client.get("/decorated-no-parens")
         assert resp.status_code == 401
 
 
-@pytest.mark.asyncio
 class TestRequireAuth:
     async def test_returns_user_when_authenticated(self):
         await _create_user()
@@ -268,8 +267,8 @@ class TestRequireAuth:
 
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with TestClient(app) as client:
-            resp = client.get(
+        async with _client(app) as client:
+            resp = await client.get(
                 "/require-auth",
                 headers={"Authorization": f"Bearer {result.access_token}"},
             )
@@ -281,5 +280,6 @@ class TestRequireAuth:
         svc = AuthService(cfg)
         backend = TokenAuthBackend(auth_service=svc)
         app = make_app(backend=backend)
-        with pytest.raises(AuthenticationError), TestClient(app) as client:
-            client.get("/require-auth")
+        with pytest.raises(AuthenticationError):
+            async with _client(app, raise_app_exceptions=True) as client:
+                await client.get("/require-auth")
