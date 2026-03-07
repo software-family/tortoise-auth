@@ -26,10 +26,18 @@ if TYPE_CHECKING:
 
     from starlette.requests import HTTPConnection, Request
 
+    from tortoise_auth.rate_limit import RateLimitBackend
+
 from tortoise_auth.exceptions import AuthenticationError, TokenError
 from tortoise_auth.services import AuthService
 
-__all__ = ["AnonymousUser", "TokenAuthBackend", "login_required", "require_auth"]
+__all__ = [
+    "AnonymousUser",
+    "RateLimitMiddleware",
+    "TokenAuthBackend",
+    "login_required",
+    "require_auth",
+]
 
 
 class AnonymousUser:
@@ -143,3 +151,42 @@ def login_required(
     if fn is not None:
         return decorator(fn)
     return decorator
+
+
+class RateLimitMiddleware:
+    """ASGI middleware for IP-based rate limiting on specific paths."""
+
+    def __init__(
+        self,
+        app: Any,
+        rate_limiter: RateLimitBackend,
+        *,
+        paths: list[str] | None = None,
+    ) -> None:
+        self.app = app
+        self.rate_limiter = rate_limiter
+        self.paths = paths
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        if self.paths is not None and scope["path"] not in self.paths:
+            await self.app(scope, receive, send)
+            return
+
+        client = scope.get("client")
+        ip = client[0] if client else "unknown"
+
+        result = await self.rate_limiter.check(ip)
+        if not result.allowed:
+            response = JSONResponse(
+                {"detail": "Too many requests", "retry_after": result.retry_after},
+                status_code=429,
+                headers={"Retry-After": str(result.retry_after)},
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)

@@ -10,9 +10,11 @@ from tortoise_auth.events import emitter
 from tortoise_auth.exceptions import (
     AuthenticationError,
     InvalidPasswordError,
+    RateLimitError,
     TokenInvalidError,
     TokenRevokedError,
 )
+from tortoise_auth.rate_limit.memory import InMemoryRateLimitBackend
 from tortoise_auth.services.auth import AuthService
 from tortoise_auth.tokens import AuthResult, TokenPair
 from tortoise_auth.tokens.jwt import JWTBackend
@@ -277,6 +279,113 @@ class TestAuthServiceTimingAttack:
         with patch.object(svc, "_dummy_verify") as mock_dummy:
             await svc.login("user@example.com", "Str0ngP@ss!")
             mock_dummy.assert_not_called()
+
+
+class TestAuthServiceRateLimiting:
+    async def test_login_works_without_rate_limiter(self):
+        """Backward compatibility: no rate limiter means no rate limiting."""
+        await _create_user()
+        svc = AuthService(make_config())
+        result = await svc.login("user@example.com", "Str0ngP@ss!")
+        assert isinstance(result, AuthResult)
+
+    async def test_rate_limit_blocks_after_max_attempts(self):
+        await _create_user()
+        cfg = make_config(rate_limit_max_attempts=3, rate_limit_window=300, rate_limit_lockout=600)
+        limiter = InMemoryRateLimitBackend(cfg)
+        svc = AuthService(cfg, rate_limiter=limiter)
+
+        for _ in range(3):
+            with pytest.raises(AuthenticationError):
+                await svc.login("user@example.com", "wrong-password")
+
+        with pytest.raises(RateLimitError) as exc_info:
+            await svc.login("user@example.com", "Str0ngP@ss!")
+        assert exc_info.value.retry_after > 0
+        assert exc_info.value.identifier == "user@example.com"
+
+    async def test_successful_login_resets_counter(self):
+        await _create_user()
+        cfg = make_config(rate_limit_max_attempts=3, rate_limit_window=300, rate_limit_lockout=600)
+        limiter = InMemoryRateLimitBackend(cfg)
+        svc = AuthService(cfg, rate_limiter=limiter)
+
+        # Two failed attempts
+        for _ in range(2):
+            with pytest.raises(AuthenticationError):
+                await svc.login("user@example.com", "wrong-password")
+
+        # Successful login resets counter
+        result = await svc.login("user@example.com", "Str0ngP@ss!")
+        assert isinstance(result, AuthResult)
+
+        # Can fail again without being rate limited
+        with pytest.raises(AuthenticationError):
+            await svc.login("user@example.com", "wrong-password")
+
+    async def test_rate_limit_exceeded_event_emitted(self):
+        await _create_user()
+        cfg = make_config(rate_limit_max_attempts=2, rate_limit_window=300, rate_limit_lockout=600)
+        limiter = InMemoryRateLimitBackend(cfg)
+        svc = AuthService(cfg, rate_limiter=limiter)
+        events: list[dict[str, object]] = []
+
+        @emitter.on("rate_limit_exceeded")
+        async def handler(**kwargs: object) -> None:
+            events.append(kwargs)
+
+        # Exhaust attempts
+        for _ in range(2):
+            with pytest.raises(AuthenticationError):
+                await svc.login("user@example.com", "wrong")
+
+        # Trigger rate limit
+        with pytest.raises(RateLimitError):
+            await svc.login("user@example.com", "wrong")
+
+        assert len(events) == 1
+        assert events[0]["identifier"] == "user@example.com"
+        assert events[0]["retry_after"] > 0  # type: ignore[operator]
+
+    async def test_not_found_counts_against_limit(self):
+        cfg = make_config(rate_limit_max_attempts=2, rate_limit_window=300, rate_limit_lockout=600)
+        limiter = InMemoryRateLimitBackend(cfg)
+        svc = AuthService(cfg, rate_limiter=limiter)
+
+        for _ in range(2):
+            with pytest.raises(AuthenticationError):
+                await svc.login("nobody@example.com", "password")
+
+        with pytest.raises(RateLimitError):
+            await svc.login("nobody@example.com", "password")
+
+    async def test_inactive_user_counts_against_limit(self):
+        user = await _create_user()
+        user.is_active = False
+        await user.save(update_fields=["is_active"])
+        cfg = make_config(rate_limit_max_attempts=2, rate_limit_window=300, rate_limit_lockout=600)
+        limiter = InMemoryRateLimitBackend(cfg)
+        svc = AuthService(cfg, rate_limiter=limiter)
+
+        for _ in range(2):
+            with pytest.raises(AuthenticationError):
+                await svc.login("user@example.com", "Str0ngP@ss!")
+
+        with pytest.raises(RateLimitError):
+            await svc.login("user@example.com", "Str0ngP@ss!")
+
+    async def test_bad_password_counts_against_limit(self):
+        await _create_user()
+        cfg = make_config(rate_limit_max_attempts=2, rate_limit_window=300, rate_limit_lockout=600)
+        limiter = InMemoryRateLimitBackend(cfg)
+        svc = AuthService(cfg, rate_limiter=limiter)
+
+        for _ in range(2):
+            with pytest.raises(AuthenticationError):
+                await svc.login("user@example.com", "wrong")
+
+        with pytest.raises(RateLimitError):
+            await svc.login("user@example.com", "wrong")
 
 
 class TestAuthServicePasswordLengthCap:
