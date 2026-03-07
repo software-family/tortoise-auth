@@ -9,6 +9,7 @@ async def init_db():
         modules=[
             "tests.models",
             "tortoise_auth.models.jwt_blacklist",
+            "tortoise_auth.models.tokens",
         ],
         db_url="sqlite://:memory:",
     ) as ctx:

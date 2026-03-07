@@ -53,7 +53,6 @@ async def _create_user(
     return user
 
 
-@pytest.mark.asyncio
 class TestAuthServiceLogin:
     async def test_login_success(self):
         user = await _create_user()

@@ -46,6 +46,7 @@ class AuthConfig:
     # Token settings
     access_token_lifetime: int = 900  # 15 minutes
     refresh_token_lifetime: int = 604_800  # 7 days
+    token_length: int = 64
 
     # Password limits
     max_password_length: int = 4096
