@@ -82,7 +82,7 @@ print(tortoise_auth.__version__)
 You should see output similar to:
 
 ```text
-0.1.0
+0.2.0
 ```
 
 !!! tip

@@ -13,6 +13,26 @@ framework. Define your user model, call `configure()`, and you have a
 production-ready auth layer that works with FastAPI, Starlette, Sanic, or any
 other async Python framework.
 
+## What You Can Build
+
+tortoise-auth covers the most common authentication scenarios out of the box:
+
+| Use Case | Features Used |
+|----------|--------------|
+| **User registration & login** | `AbstractUser`, `AuthService.login` |
+| **Protected API endpoints** | `AuthService.authenticate`, Starlette `TokenAuthBackend` |
+| **Token refresh rotation** | `AuthService.refresh` |
+| **Email verification** | `make_token` / `verify_token` (HMAC signing) |
+| **Password reset** | `make_token` / `verify_token` with `max_age` |
+| **Invite links & unsubscribe URLs** | `Signer` / `TimestampSigner` |
+| **Force logout everywhere** | `AuthService.logout_all` |
+| **Audit logging & notifications** | Event system (`on`, `emit`) |
+| **Account lockout on failed logins** | `user_login_failed` event |
+| **Migrating password hashes from Django** | Auto-migration (Argon2id, bcrypt, PBKDF2) |
+| **OAuth / social login users** | `set_unusable_password()` |
+
+See the [Use Cases & Cookbook](guides/use-cases.md) for complete, copy-pasteable examples.
+
 ## Key Features
 
 - **Abstract User model** -- extend `AbstractUser` to get email-based
@@ -20,8 +40,9 @@ other async Python framework.
   timestamp tracking out of the box.
 - **AuthService** -- high-level async API for `login`, `authenticate`,
   `refresh`, `logout`, and `logout_all`.
-- **Database token backend** -- server-side opaque tokens with full revocation
-  support. Pluggable via the `TokenBackend` Protocol for custom backends.
+- **Pluggable token backends** -- choose between stateless **JWT** tokens or
+  server-side **database** tokens. Both implement the `TokenBackend` Protocol
+  for easy swapping or custom backends.
 - **Multi-algorithm password hashing** -- Argon2id (primary), Bcrypt, and
   PBKDF2-SHA256 with transparent auto-migration to the strongest hasher.
 - **Password validation** -- four built-in validators (minimum length, common
@@ -32,6 +53,8 @@ other async Python framework.
   URLs, and other signed payloads.
 - **Event system** -- subscribe to `user_login`, `user_login_failed`,
   `user_logout`, and `password_changed` events with async handlers.
+- **Starlette integration** -- `TokenAuthBackend`, `login_required` decorator,
+  and `require_auth` helper for Starlette and FastAPI apps.
 - **Fully async** -- every I/O operation uses `await`; no hidden synchronous
   calls.
 
@@ -75,6 +98,23 @@ pip install tortoise-auth
 !!! note "Optional dependencies"
     Argon2 hashing requires the `argon2-cffi` package, which is installed
     automatically as a dependency of tortoise-auth.
+
+## Quick Navigation
+
+<div class="grid" markdown>
+
+- :material-rocket-launch: **[Quick Start](getting-started/quickstart.md)** -- Set up your first project in under five minutes
+- :material-cog: **[Configuration](guides/configuration.md)** -- All configuration options explained
+- :material-key: **[Authentication](guides/authentication.md)** -- Login, logout, and token management
+- :material-database: **[Token Backends](guides/token-backends.md)** -- JWT vs database tokens
+- :material-lock: **[Password Hashing](guides/password-hashing.md)** -- Argon2id, bcrypt, PBKDF2, and auto-migration
+- :material-shield-check: **[Password Validation](guides/password-validation.md)** -- Built-in and custom validators
+- :material-signature: **[Signing (HMAC)](guides/signing.md)** -- Signed tokens for email verification and resets
+- :material-bell: **[Events](guides/events.md)** -- React to login, logout, and password changes
+- :material-language-python: **[Starlette Integration](integrations/starlette.md)** -- Middleware, decorators, and protected routes
+- :material-book-open: **[Use Cases & Cookbook](guides/use-cases.md)** -- Real-world examples you can copy-paste
+
+</div>
 
 ## Next Steps
 
