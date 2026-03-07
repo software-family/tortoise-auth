@@ -11,6 +11,7 @@ from tortoise_auth.exceptions import (
     EventError,
     InvalidHashError,
     InvalidPasswordError,
+    RateLimitError,
     SignatureExpiredError,
     SigningError,
     TokenError,
@@ -23,9 +24,13 @@ from tortoise_auth.models import (
     AbstractUser,
     AccessToken,
     BlacklistedToken,
+    LoginAttempt,
     OutstandingToken,
     RefreshToken,
 )
+from tortoise_auth.rate_limit import RateLimitBackend, RateLimitResult
+from tortoise_auth.rate_limit.database import DatabaseRateLimitBackend
+from tortoise_auth.rate_limit.memory import InMemoryRateLimitBackend
 from tortoise_auth.services import AuthService
 from tortoise_auth.signing import Signer, TimestampSigner, make_token, verify_token
 from tortoise_auth.tokens import AuthResult, TokenBackend, TokenPair, TokenPayload
@@ -42,12 +47,18 @@ __all__ = [
     "BadSignatureError",
     "BlacklistedToken",
     "ConfigurationError",
+    "DatabaseRateLimitBackend",
     "DatabaseTokenBackend",
     "EventError",
+    "InMemoryRateLimitBackend",
     "InvalidHashError",
     "InvalidPasswordError",
     "JWTBackend",
+    "LoginAttempt",
     "OutstandingToken",
+    "RateLimitBackend",
+    "RateLimitError",
+    "RateLimitResult",
     "RefreshToken",
     "SignatureExpiredError",
     "Signer",

@@ -71,3 +71,14 @@ class SignatureExpiredError(SigningError):
 
 class BadSignatureError(SigningError):
     """Raised when a signed token has an invalid signature."""
+
+
+class RateLimitError(TortoiseAuthError):
+    """Raised when a login attempt is rejected due to rate limiting."""
+
+    def __init__(self, identifier: str, retry_after: int) -> None:
+        self.identifier = identifier
+        self.retry_after = retry_after
+        super().__init__(
+            f"Rate limit exceeded for {identifier!r}. Retry after {retry_after} seconds."
+        )
