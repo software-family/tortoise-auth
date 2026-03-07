@@ -15,7 +15,6 @@ def _clear_events():
     emitter.clear()
 
 
-@pytest.mark.asyncio
 class TestAbstractUser:
     async def test_set_and_check_password(self):
         user = await MinimalUser.create(email="test@example.com")
