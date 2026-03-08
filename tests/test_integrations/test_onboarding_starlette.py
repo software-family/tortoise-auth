@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from tortoise.timezone import now as tz_now
@@ -25,6 +24,9 @@ from tortoise_auth.onboarding.service import OnboardingService
 from tortoise_auth.onboarding.steps.register import RegisterStep
 from tortoise_auth.onboarding.steps.setup_totp import SetupTOTPStep
 from tortoise_auth.onboarding.steps.verify_email import VerifyEmailStep
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 
 def _make_config(**overrides: object) -> AuthConfig:
@@ -81,14 +83,16 @@ def _make_app(service: OnboardingService | None = None) -> Starlette:
         body = await request.json()
         ip = request.client.host if request.client else ""
         result = await svc.start(body["email"], ip_address=ip)
-        return JSONResponse({
-            "session_token": result.session_token,
-            "current_step": result.current_step,
-            "status": result.status,
-            "client_hint": _serialize_hint(result.client_hint),
-            "completed_steps": result.completed_steps,
-            "remaining_steps": result.remaining_steps,
-        })
+        return JSONResponse(
+            {
+                "session_token": result.session_token,
+                "current_step": result.current_step,
+                "status": result.status,
+                "client_hint": _serialize_hint(result.client_hint),
+                "completed_steps": result.completed_steps,
+                "remaining_steps": result.remaining_steps,
+            }
+        )
 
     async def advance(request: Request) -> JSONResponse:
         body = await request.json()
@@ -130,19 +134,23 @@ def _make_app(service: OnboardingService | None = None) -> Starlette:
         except OnboardingFlowCompleteError:
             return JSONResponse({"error": "Already completed"}, status_code=409)
 
-        return JSONResponse({
-            "status": result.status,
-            "current_step": result.current_step,
-            "client_hint": _serialize_hint(result.client_hint),
-            "completed_steps": result.completed_steps,
-            "remaining_steps": result.remaining_steps,
-        })
+        return JSONResponse(
+            {
+                "status": result.status,
+                "current_step": result.current_step,
+                "client_hint": _serialize_hint(result.client_hint),
+                "completed_steps": result.completed_steps,
+                "remaining_steps": result.remaining_steps,
+            }
+        )
 
-    return Starlette(routes=[
-        Route("/onboarding/start", start, methods=["POST"]),
-        Route("/onboarding/advance", advance, methods=["POST"]),
-        Route("/onboarding/resume", resume, methods=["POST"]),
-    ])
+    return Starlette(
+        routes=[
+            Route("/onboarding/start", start, methods=["POST"]),
+            Route("/onboarding/advance", advance, methods=["POST"]),
+            Route("/onboarding/resume", resume, methods=["POST"]),
+        ]
+    )
 
 
 def _client(app: Starlette) -> AsyncClient:
@@ -199,12 +207,15 @@ class TestAdvanceEndpoint:
             )
             token = start.json()["session_token"]
 
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "adv@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "adv@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
 
         data = resp.json()
         assert resp.status_code == 200
@@ -221,12 +232,15 @@ class TestAdvanceEndpoint:
             )
             token = start.json()["session_token"]
 
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "",
-                "password": "",
-                "password_confirm": "",
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "",
+                    "password": "",
+                    "password_confirm": "",
+                },
+            )
 
         data = resp.json()
         assert resp.status_code == 200
@@ -243,12 +257,15 @@ class TestAdvanceEndpoint:
             )
             token = start.json()["session_token"]
 
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "mis@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "DifferentP@ss1",
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "mis@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "DifferentP@ss1",
+                },
+            )
 
         data = resp.json()
         assert data["status"] == "error"
@@ -274,27 +291,36 @@ class TestFullFlow:
             token = r_start.json()["session_token"]
 
             # 2. Register
-            r_reg = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "full@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            r_reg = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "full@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
             assert r_reg.json()["current_step"] == "verify_email"
 
             # 3. Send verification code (empty data)
-            r_send = await c.post("/onboarding/advance", json={
-                "session_token": token,
-            })
+            r_send = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                },
+            )
             assert r_send.json()["status"] == "in_progress"
             assert r_send.json()["current_step"] == "verify_email"
             assert len(codes) == 1
 
             # 4. Verify the code
-            r_verify = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "code": codes[0],
-            })
+            r_verify = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "code": codes[0],
+                },
+            )
 
         data = r_verify.json()
         assert data["status"] == "completed"
@@ -320,31 +346,43 @@ class TestFullFlow:
             token = start.json()["session_token"]
 
             # Register
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "retry@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "retry@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
 
             # Send code
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-            })
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                },
+            )
 
             # Wrong code
-            r_wrong = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "code": "000000",
-            })
+            r_wrong = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "code": "000000",
+                },
+            )
             assert r_wrong.json()["status"] == "error"
             assert any("Invalid" in e for e in r_wrong.json()["errors"])
 
             # Correct code
-            r_ok = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "code": codes[0],
-            })
+            r_ok = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "code": codes[0],
+                },
+            )
 
         assert r_ok.json()["status"] == "completed"
         assert "access_token" in r_ok.json()
@@ -360,9 +398,12 @@ class TestResumeEndpoint:
             )
             token = start.json()["session_token"]
 
-            resp = await c.post("/onboarding/resume", json={
-                "session_token": token,
-            })
+            resp = await c.post(
+                "/onboarding/resume",
+                json={
+                    "session_token": token,
+                },
+            )
 
         data = resp.json()
         assert resp.status_code == 200
@@ -379,17 +420,23 @@ class TestResumeEndpoint:
             token = start.json()["session_token"]
 
             # Advance past register
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "resume2@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "resume2@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
 
             # Resume should be at verify_email
-            resp = await c.post("/onboarding/resume", json={
-                "session_token": token,
-            })
+            resp = await c.post(
+                "/onboarding/resume",
+                json={
+                    "session_token": token,
+                },
+            )
 
         assert resp.json()["current_step"] == "verify_email"
 
@@ -398,10 +445,13 @@ class TestErrorResponses:
     async def test_invalid_token_returns_404(self) -> None:
         app = _make_app()
         async with _client(app) as c:
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": "nonexistent-token",
-                "email": "x@x.com",
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": "nonexistent-token",
+                    "email": "x@x.com",
+                },
+            )
         assert resp.status_code == 404
         assert resp.json()["error"] == "Session not found"
 
@@ -421,10 +471,13 @@ class TestErrorResponses:
         await session.save(update_fields=["expires_at"])
 
         async with _client(app) as c:
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "expired@example.com",
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "expired@example.com",
+                },
+            )
         assert resp.status_code == 410
 
     async def test_completed_flow_returns_409(self) -> None:
@@ -442,24 +495,36 @@ class TestErrorResponses:
             )
             token = start.json()["session_token"]
 
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "done@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-            })
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "code": codes[0],
-            })
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "done@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                },
+            )
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "code": codes[0],
+                },
+            )
 
             # Try to advance again
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                },
+            )
         assert resp.status_code == 409
 
     async def test_invalidated_session_returns_404(self) -> None:
@@ -478,9 +543,12 @@ class TestErrorResponses:
         await session.save(update_fields=["is_invalidated"])
 
         async with _client(app) as c:
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                },
+            )
         assert resp.status_code == 404
 
     async def test_resume_expired_returns_410(self) -> None:
@@ -498,9 +566,12 @@ class TestErrorResponses:
         await session.save(update_fields=["expires_at"])
 
         async with _client(app) as c:
-            resp = await c.post("/onboarding/resume", json={
-                "session_token": token,
-            })
+            resp = await c.post(
+                "/onboarding/resume",
+                json={
+                    "session_token": token,
+                },
+            )
         assert resp.status_code == 410
 
 
@@ -514,10 +585,13 @@ class TestSkipEndpoint:
             )
             token = start.json()["session_token"]
 
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "skip": True,
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "skip": True,
+                },
+            )
 
         data = resp.json()
         assert data["status"] == "error"
@@ -543,18 +617,24 @@ class TestSkipEndpoint:
             token = start.json()["session_token"]
 
             # Register
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "skiptotp@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "skiptotp@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
 
             # Skip TOTP → should complete
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "skip": True,
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "skip": True,
+                },
+            )
 
         data = resp.json()
         assert data["status"] == "completed"
@@ -578,21 +658,27 @@ class TestSessionInvalidation:
             token2 = r2.json()["session_token"]
 
             # Old token should be invalidated
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": token1,
-                "email": "same@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token1,
+                    "email": "same@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
             assert resp.status_code == 404
 
             # New token should work
-            resp2 = await c.post("/onboarding/advance", json={
-                "session_token": token2,
-                "email": "same@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            resp2 = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token2,
+                    "email": "same@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
             assert resp2.json()["status"] == "in_progress"
 
 
@@ -605,24 +691,30 @@ class TestDuplicateEmail:
                 "/onboarding/start",
                 json={"email": "dup@example.com"},
             )
-            await c.post("/onboarding/advance", json={
-                "session_token": s1.json()["session_token"],
-                "email": "dup@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": s1.json()["session_token"],
+                    "email": "dup@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
 
             # Second user tries same email
             s2 = await c.post(
                 "/onboarding/start",
                 json={"email": "dup2@example.com"},
             )
-            resp = await c.post("/onboarding/advance", json={
-                "session_token": s2.json()["session_token"],
-                "email": "dup@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
+            resp = await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": s2.json()["session_token"],
+                    "email": "dup@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
 
         data = resp.json()
         assert data["status"] == "error"
@@ -659,19 +751,28 @@ class TestEvents:
             )
             token = start.json()["session_token"]
 
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "email": "evt@example.com",
-                "password": "StrongP@ss1",
-                "password_confirm": "StrongP@ss1",
-            })
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-            })
-            await c.post("/onboarding/advance", json={
-                "session_token": token,
-                "code": codes[0],
-            })
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "email": "evt@example.com",
+                    "password": "StrongP@ss1",
+                    "password_confirm": "StrongP@ss1",
+                },
+            )
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                },
+            )
+            await c.post(
+                "/onboarding/advance",
+                json={
+                    "session_token": token,
+                    "code": codes[0],
+                },
+            )
 
         assert events == [
             "started",

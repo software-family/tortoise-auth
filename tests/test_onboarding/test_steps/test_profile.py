@@ -67,9 +67,7 @@ class TestProfileExecute:
         user = await user_model.create(email="profile@example.com", phone="")
         await user.set_password("StrongP@ss1")
 
-        context = StepContext(
-            session_id="s1", step_data={}, user_id=str(user.pk), config=config
-        )
+        context = StepContext(session_id="s1", step_data={}, user_id=str(user.pk), config=config)
         result = await step.execute(context, {})
         assert result.success is False
         assert any("phone" in e for e in result.errors)
@@ -80,9 +78,7 @@ class TestProfileExecute:
         user = await user_model.create(email="profile2@example.com", phone="")
         await user.set_password("StrongP@ss1")
 
-        context = StepContext(
-            session_id="s1", step_data={}, user_id=str(user.pk), config=config
-        )
+        context = StepContext(session_id="s1", step_data={}, user_id=str(user.pk), config=config)
         result = await step.execute(context, {"phone": "1234567890"})
         assert result.success is True
 

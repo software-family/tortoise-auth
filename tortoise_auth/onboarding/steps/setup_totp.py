@@ -93,9 +93,7 @@ class SetupTOTPStep:
             },
         )
 
-    async def _verify_code(
-        self, context: StepContext, code: str, pyotp: Any
-    ) -> StepResult:
+    async def _verify_code(self, context: StepContext, code: str, pyotp: Any) -> StepResult:
         """Verify the TOTP code and persist the secret on the user."""
         secret = context.step_data.get("_totp_secret", "")
         if not secret:
