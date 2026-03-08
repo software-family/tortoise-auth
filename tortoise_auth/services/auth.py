@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from tortoise import Tortoise
 from tortoise.timezone import now as tz_now
@@ -11,8 +11,12 @@ from tortoise.transactions import in_transaction
 
 from tortoise_auth.config import AuthConfig, get_config
 from tortoise_auth.events import emit
-from tortoise_auth.exceptions import AuthenticationError
+from tortoise_auth.exceptions import AuthenticationError, RateLimitError
 from tortoise_auth.tokens import AuthResult, TokenBackend, TokenPair
+
+if TYPE_CHECKING:
+    from tortoise_auth.rate_limit import RateLimitBackend
+
 
 # Pre-computed Argon2 hash of a dummy value, used to equalize timing
 # when a user is not found (prevents user-enumeration via timing).
@@ -27,9 +31,11 @@ class AuthService:
         config: AuthConfig | None = None,
         *,
         backend: TokenBackend | None = None,
+        rate_limiter: RateLimitBackend | None = None,
     ) -> None:
         self._config = config
         self._backend = backend
+        self._rate_limiter = rate_limiter
 
     @property
     def config(self) -> AuthConfig:
@@ -46,22 +52,41 @@ class AuthService:
 
     async def login(self, identifier: str, password: str, **extra_claims: Any) -> AuthResult:
         """Authenticate a user by email and password, returning tokens."""
+        if self._rate_limiter is not None:
+            result = await self._rate_limiter.check(identifier)
+            if not result.allowed:
+                await emit(
+                    "rate_limit_exceeded",
+                    identifier=identifier,
+                    retry_after=result.retry_after,
+                )
+                raise RateLimitError(identifier, result.retry_after)
+
         user_model = self._resolve_user_model()
         user = await user_model.filter(email=identifier).first()
 
         if user is None:
             self._dummy_verify(password)
+            if self._rate_limiter is not None:
+                await self._rate_limiter.record(identifier)
             await emit("user_login_failed", identifier=identifier, reason="not_found")
             raise AuthenticationError("Invalid credentials")
 
         if not user.is_active:
             self._dummy_verify(password)
+            if self._rate_limiter is not None:
+                await self._rate_limiter.record(identifier)
             await emit("user_login_failed", identifier=identifier, reason="inactive")
             raise AuthenticationError("Invalid credentials")
 
         if not await user.check_password(password):
+            if self._rate_limiter is not None:
+                await self._rate_limiter.record(identifier)
             await emit("user_login_failed", identifier=identifier, reason="bad_password")
             raise AuthenticationError("Invalid credentials")
+
+        if self._rate_limiter is not None:
+            await self._rate_limiter.reset(identifier)
 
         user_id = str(user.pk)
         tokens = await self.backend.create_tokens(user_id, **extra_claims)

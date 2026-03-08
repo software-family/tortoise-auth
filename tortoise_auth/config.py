@@ -48,6 +48,11 @@ class AuthConfig:
     refresh_token_lifetime: int = 604_800  # 7 days
     token_length: int = 64
 
+    # Rate limiting
+    rate_limit_max_attempts: int = 5
+    rate_limit_window: int = 300  # 5 minutes
+    rate_limit_lockout: int = 600  # 10 minutes
+
     # Password limits
     max_password_length: int = 4096
 
@@ -68,6 +73,12 @@ class AuthConfig:
             raise ConfigurationError("access_token_lifetime must be positive")
         if self.refresh_token_lifetime <= 0:
             raise ConfigurationError("refresh_token_lifetime must be positive")
+        if self.rate_limit_max_attempts <= 0:
+            raise ConfigurationError("rate_limit_max_attempts must be positive")
+        if self.rate_limit_window <= 0:
+            raise ConfigurationError("rate_limit_window must be positive")
+        if self.rate_limit_lockout <= 0:
+            raise ConfigurationError("rate_limit_lockout must be positive")
 
     @property
     def effective_signing_secret(self) -> str:

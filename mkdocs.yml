@@ -52,6 +52,7 @@ nav:
       - Password Validation: guides/password-validation.md
       - Signing: guides/signing.md
       - Events: guides/events.md
+      - Rate Limiting: guides/rate-limiting.md
       - Use Cases & Cookbook: guides/use-cases.md
   - Integrations:
       - Starlette: integrations/starlette.md
