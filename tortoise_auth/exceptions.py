@@ -82,3 +82,39 @@ class RateLimitError(TortoiseAuthError):
         super().__init__(
             f"Rate limit exceeded for {identifier!r}. Retry after {retry_after} seconds."
         )
+
+
+class OnboardingError(TortoiseAuthError):
+    """Base exception for onboarding flow errors."""
+
+
+class OnboardingSessionExpiredError(OnboardingError):
+    """Raised when an onboarding session has expired."""
+
+    def __init__(self, session_id: str) -> None:
+        self.session_id = session_id
+        super().__init__(f"Onboarding session {session_id!r} has expired")
+
+
+class OnboardingSessionInvalidError(OnboardingError):
+    """Raised when an onboarding session is not found or invalid."""
+
+    def __init__(self, reason: str = "Session not found") -> None:
+        self.reason = reason
+        super().__init__(reason)
+
+
+class OnboardingStepError(OnboardingError):
+    """Raised when an onboarding step fails."""
+
+    def __init__(self, step_name: str, errors: list[str]) -> None:
+        self.step_name = step_name
+        self.errors = errors
+        super().__init__(f"Step {step_name!r} failed: {'; '.join(errors)}")
+
+
+class OnboardingFlowCompleteError(OnboardingError):
+    """Raised when attempting to advance a completed onboarding flow."""
+
+    def __init__(self) -> None:
+        super().__init__("Onboarding flow is already complete")

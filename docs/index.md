@@ -20,6 +20,7 @@ tortoise-auth covers the most common authentication scenarios out of the box:
 | Use Case | Features Used |
 |----------|--------------|
 | **User registration & login** | `AbstractUser`, `AuthService.login` |
+| **Multi-step onboarding** | `OnboardingService` — server-driven register → verify → TOTP flow |
 | **Protected API endpoints** | `AuthService.authenticate`, Starlette `TokenAuthBackend` |
 | **Token refresh rotation** | `AuthService.refresh` |
 | **Email verification** | `make_token` / `verify_token` (HMAC signing) |
@@ -51,6 +52,9 @@ See the [Use Cases & Cookbook](guides/use-cases.md) for complete, copy-pasteable
 - **HMAC signing** -- `Signer`, `TimestampSigner`, and convenience helpers
   `make_token` / `verify_token` for email-confirmation links, password-reset
   URLs, and other signed payloads.
+- **Onboarding flow engine** -- server-driven, multi-step onboarding with
+  built-in steps for registration, email verification, TOTP setup, and profile
+  completion. Pluggable via the `OnboardingStep` Protocol.
 - **Event system** -- subscribe to `user_login`, `user_login_failed`,
   `user_logout`, and `password_changed` events with async handlers.
 - **Starlette integration** -- `TokenAuthBackend`, `login_required` decorator,
@@ -110,6 +114,7 @@ pip install tortoise-auth
 - :material-lock: **[Password Hashing](guides/password-hashing.md)** -- Argon2id, bcrypt, PBKDF2, and auto-migration
 - :material-shield-check: **[Password Validation](guides/password-validation.md)** -- Built-in and custom validators
 - :material-signature: **[Signing (HMAC)](guides/signing.md)** -- Signed tokens for email verification and resets
+- :material-account-plus: **[Onboarding Flow](guides/onboarding.md)** -- Server-driven multi-step registration
 - :material-bell: **[Events](guides/events.md)** -- React to login, logout, and password changes
 - :material-language-python: **[Starlette Integration](integrations/starlette.md)** -- Middleware, decorators, and protected routes
 - :material-book-open: **[Use Cases & Cookbook](guides/use-cases.md)** -- Real-world examples you can copy-paste

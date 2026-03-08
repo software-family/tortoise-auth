@@ -70,6 +70,13 @@ call `emit()` yourself for these -- the library handles it.
 | `user_login_failed`  | `AuthService.login()`       | `handler(*, identifier: str, reason: str)`              | After a login attempt fails. `reason` is one of `"not_found"`, `"inactive"`, or `"bad_password"`. |
 | `user_logout`        | `AuthService.logout()` / `logout_all()` | `handler(user)`                            | After a token is revoked. `user` is the model instance. |
 | `password_changed`   | `AbstractUser.set_password()` | `handler(user)`                                       | After the password hash is saved to the database. `user` is the model instance. |
+| `onboarding_started` | `OnboardingService.start()` | `handler(*, email: str, session_id: str, pipeline: list)` | After a new onboarding session is created. |
+| `onboarding_step_completed` | `OnboardingService.advance()` | `handler(*, session_id: str, step_name: str, user_id: str)` | After an onboarding step succeeds. |
+| `onboarding_step_skipped` | `OnboardingService.advance()` | `handler(*, session_id: str, step_name: str)` | After an onboarding step is skipped. |
+| `onboarding_step_failed` | `OnboardingService.advance()` | `handler(*, session_id: str, step_name: str, errors: list)` | After an onboarding step fails. |
+| `onboarding_completed` | `OnboardingService._finalize()` | `handler(*, user, session_id: str)` | After the onboarding flow completes and tokens are issued. |
+| `onboarding_session_expired` | `OnboardingService._lookup_session()` | `handler(*, session_id: str, email: str)` | When an expired session is accessed. |
+| `verification_code_generated` | `VerifyEmailStep.execute()` | `handler(*, email: str, code: str)` | When a 6-digit verification code is generated. **You must listen to this event to send the email.** |
 
 !!! warning
     `user_login_failed` passes its arguments as **keyword-only** arguments

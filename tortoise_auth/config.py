@@ -67,6 +67,14 @@ class AuthConfig:
     jwt_audience: str = ""
     jwt_blacklist_enabled: bool = False
 
+    # Onboarding settings
+    onboarding_session_lifetime: int = 3600
+    onboarding_session_token_length: int = 64
+    onboarding_require_totp: bool = False
+    onboarding_max_verification_attempts: int = 5
+    onboarding_verification_code_ttl: int = 600
+    onboarding_invalidate_previous_sessions: bool = True
+
     def validate(self) -> None:
         """Validate config. Raises ConfigurationError."""
         if self.access_token_lifetime <= 0:
@@ -79,6 +87,12 @@ class AuthConfig:
             raise ConfigurationError("rate_limit_window must be positive")
         if self.rate_limit_lockout <= 0:
             raise ConfigurationError("rate_limit_lockout must be positive")
+        if self.onboarding_session_lifetime <= 0:
+            raise ConfigurationError("onboarding_session_lifetime must be positive")
+        if self.onboarding_session_token_length < 32:
+            raise ConfigurationError("onboarding_session_token_length must be at least 32")
+        if self.onboarding_max_verification_attempts <= 0:
+            raise ConfigurationError("onboarding_max_verification_attempts must be positive")
 
     @property
     def effective_signing_secret(self) -> str:

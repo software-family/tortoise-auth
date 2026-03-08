@@ -9,6 +9,7 @@ async def init_db():
         modules=[
             "tests.models",
             "tortoise_auth.models.jwt_blacklist",
+            "tortoise_auth.models.onboarding",
             "tortoise_auth.models.rate_limit",
             "tortoise_auth.models.tokens",
         ],
