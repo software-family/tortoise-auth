@@ -497,6 +497,267 @@ async def unsubscribe(token: str):
 
 ---
 
+## Server-Driven Onboarding Flow
+
+Use the onboarding engine to guide new users through a multi-step registration
+flow (register → verify email → optional TOTP → profile completion) from a
+single endpoint. The server tells the client what to render at each step via
+`client_hint`.
+
+### Minimal setup (register + email verification)
+
+```python
+from tortoise_auth import AuthConfig, configure
+from tortoise_auth.events import on
+from tortoise_auth.onboarding.service import OnboardingService
+from tortoise_auth.onboarding.steps import RegisterStep, VerifyEmailStep
+
+configure(AuthConfig(
+    user_model="myapp.User",
+    signing_secret="your-secret-key-at-least-32-bytes-long!",
+    onboarding_session_lifetime=3600,         # 1 hour
+    onboarding_verification_code_ttl=600,     # 10 minutes
+))
+
+
+# You MUST listen to this event to deliver the verification code
+@on("verification_code_generated")
+async def send_code(*, email: str, code: str) -> None:
+    # send_email(to=email, subject="Your code", body=f"Code: {code}")
+    pass
+
+
+onboarding = OnboardingService()
+
+# Start the flow — returns a session token + first step hint
+result = await onboarding.start("user@example.com")
+# result.session_token  → pass this to the client
+# result.client_hint    → tells the client to show register fields
+
+# Advance through register
+result = await onboarding.advance(result.session_token, {
+    "email": "user@example.com",
+    "password": "Str0ngP@ssword!",
+    "password_confirm": "Str0ngP@ssword!",
+})
+# result.current_step == "verify_email"
+
+# Advance to send the code (phase 1)
+result = await onboarding.advance(result.session_token, {})
+# verification_code_generated event fires — send the email
+
+# Advance with the code (phase 2)
+result = await onboarding.advance(result.session_token, {"code": "123456"})
+# result.status == "completed"
+# result.auth_result.access_token / refresh_token
+```
+
+### Full pipeline with TOTP and profile
+
+```python
+from tortoise_auth.onboarding.steps import (
+    ProfileCompletionStep,
+    RegisterStep,
+    SetupTOTPStep,
+    VerifyEmailStep,
+)
+
+onboarding = OnboardingService(
+    config=AuthConfig(
+        user_model="myapp.User",
+        signing_secret="your-secret-key-at-least-32-bytes-long!",
+        onboarding_require_totp=True,
+    ),
+    steps={
+        "register": RegisterStep(),
+        "verify_email": VerifyEmailStep(),
+        "setup_totp": SetupTOTPStep(),
+        "profile": ProfileCompletionStep(
+            required_fields=["first_name", "last_name"],
+            optional_fields=["bio"],
+        ),
+    },
+    pipeline=["register", "verify_email", "setup_totp", "profile"],
+)
+```
+
+### Starlette endpoints
+
+```python
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+
+from tortoise_auth.exceptions import (
+    OnboardingFlowCompleteError,
+    OnboardingSessionExpiredError,
+    OnboardingSessionInvalidError,
+)
+
+
+async def start(request: Request) -> JSONResponse:
+    body = await request.json()
+    result = await onboarding.start(body["email"])
+    return JSONResponse({
+        "session_token": result.session_token,
+        "current_step": result.current_step,
+        "status": result.status,
+        "client_hint": _serialize(result.client_hint),
+    })
+
+
+async def advance(request: Request) -> JSONResponse:
+    body = await request.json()
+    token = body.pop("session_token")
+    skip = body.pop("skip", False)
+    try:
+        result = await onboarding.advance(token, body, skip=skip)
+    except OnboardingSessionExpiredError:
+        return JSONResponse({"error": "Session expired"}, status_code=410)
+    except OnboardingSessionInvalidError as exc:
+        return JSONResponse({"error": exc.reason}, status_code=404)
+    except OnboardingFlowCompleteError:
+        return JSONResponse({"error": "Already completed"}, status_code=409)
+
+    resp = {
+        "status": result.status,
+        "current_step": result.current_step,
+        "client_hint": _serialize(result.client_hint),
+    }
+    if result.auth_result:
+        resp["access_token"] = result.auth_result.access_token
+        resp["refresh_token"] = result.auth_result.refresh_token
+    return JSONResponse(resp)
+
+
+async def resume(request: Request) -> JSONResponse:
+    body = await request.json()
+    try:
+        result = await onboarding.resume(body["session_token"])
+    except OnboardingSessionExpiredError:
+        return JSONResponse({"error": "Session expired"}, status_code=410)
+    except OnboardingSessionInvalidError as exc:
+        return JSONResponse({"error": exc.reason}, status_code=404)
+    except OnboardingFlowCompleteError:
+        return JSONResponse({"error": "Already completed"}, status_code=409)
+
+    return JSONResponse({
+        "status": result.status,
+        "current_step": result.current_step,
+        "client_hint": _serialize(result.client_hint),
+    })
+
+
+def _serialize(hint):
+    if hint is None:
+        return None
+    return {
+        "step_name": hint.step_name,
+        "title": hint.title,
+        "description": hint.description,
+        "skippable": hint.skippable,
+        "fields": [
+            {"name": f.name, "type": f.field_type, "required": f.required,
+             "label": f.label}
+            for f in hint.fields
+        ],
+        "extra": hint.extra,
+    }
+
+
+routes = [
+    Route("/onboarding/start", start, methods=["POST"]),
+    Route("/onboarding/advance", advance, methods=["POST"]),
+    Route("/onboarding/resume", resume, methods=["POST"]),
+]
+```
+
+### Listening to lifecycle events
+
+```python
+from tortoise_auth.events import on
+
+
+@on("onboarding_started")
+async def log_start(*, email: str, session_id: str, pipeline: list) -> None:
+    print(f"Onboarding started for {email}: {pipeline}")
+
+
+@on("onboarding_step_completed")
+async def log_step(*, session_id: str, step_name: str, user_id: str) -> None:
+    print(f"Step {step_name} completed (user={user_id})")
+
+
+@on("onboarding_completed")
+async def log_done(*, user, session_id: str) -> None:
+    print(f"Onboarding completed for {user.email}")
+```
+
+### Custom onboarding step
+
+```python
+from tortoise_auth.onboarding import (
+    ClientHint,
+    FieldHint,
+    OnboardingStep,
+    StepContext,
+    StepResult,
+)
+
+
+class AcceptTermsStep:
+    """Require users to accept Terms of Service."""
+
+    @property
+    def name(self) -> str:
+        return "accept_terms"
+
+    @property
+    def skippable(self) -> bool:
+        return False
+
+    async def is_required(self, context: StepContext) -> bool:
+        return True
+
+    async def execute(
+        self, context: StepContext, data: dict
+    ) -> StepResult:
+        if not data.get("accepted"):
+            return StepResult(
+                success=False,
+                errors=["You must accept the Terms of Service."],
+            )
+        return StepResult(success=True, data={"terms_accepted": True})
+
+    def client_hint(self, context: StepContext) -> ClientHint:
+        return ClientHint(
+            step_name=self.name,
+            title="Terms of Service",
+            description="Please read and accept our Terms of Service.",
+            fields=[
+                FieldHint(
+                    name="accepted",
+                    field_type="checkbox",
+                    required=True,
+                    label="I accept the Terms of Service",
+                ),
+            ],
+        )
+
+
+# Use it in your pipeline
+onboarding = OnboardingService(
+    steps={
+        "register": RegisterStep(),
+        "accept_terms": AcceptTermsStep(),
+        "verify_email": VerifyEmailStep(),
+    },
+    pipeline=["register", "accept_terms", "verify_email"],
+)
+```
+
+---
+
 ## Starlette Full REST API
 
 A complete Starlette application with registration, login, token refresh,

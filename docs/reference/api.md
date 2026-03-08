@@ -48,6 +48,12 @@ set the values relevant to your deployment.
 | `jwt_issuer` | `str` | `""` | JWT `iss` claim value. |
 | `jwt_audience` | `str` | `""` | JWT `aud` claim value. |
 | `jwt_blacklist_enabled` | `bool` | `False` | Enable database-backed JWT blacklist. |
+| `onboarding_session_lifetime` | `int` | `3600` | Onboarding session lifetime in seconds (1 hour). |
+| `onboarding_session_token_length` | `int` | `64` | Length of the session token. Must be at least 32. |
+| `onboarding_require_totp` | `bool` | `False` | Whether TOTP setup is required during onboarding. |
+| `onboarding_max_verification_attempts` | `int` | `5` | Max wrong codes before session invalidation. |
+| `onboarding_verification_code_ttl` | `int` | `600` | Verification code lifetime in seconds (10 minutes). |
+| `onboarding_invalidate_previous_sessions` | `bool` | `True` | Invalidate prior sessions for the same email on `start()`. |
 
 The default `password_validators` list is:
 
@@ -1367,6 +1373,13 @@ internal service code.
 | `"user_login_failed"` | `identifier=, reason=` | `AuthService.login()` on failure. Reason is `"not_found"`, `"inactive"`, or `"bad_password"`. |
 | `"user_logout"` | `user` | `AuthService.logout()` and `AuthService.logout_all()`. |
 | `"password_changed"` | `user` | `AbstractUser.set_password()`. |
+| `"onboarding_started"` | `email=, session_id=, pipeline=` | `OnboardingService.start()`. |
+| `"onboarding_step_completed"` | `session_id=, step_name=, user_id=` | `OnboardingService.advance()` on step success. |
+| `"onboarding_step_skipped"` | `session_id=, step_name=` | `OnboardingService.advance()` with `skip=True`. |
+| `"onboarding_step_failed"` | `session_id=, step_name=, errors=` | `OnboardingService.advance()` on step failure. |
+| `"onboarding_completed"` | `user=, session_id=` | `OnboardingService._finalize()` after all steps. |
+| `"onboarding_session_expired"` | `session_id=, email=` | When an expired session is accessed. |
+| `"verification_code_generated"` | `email=, code=` | `VerifyEmailStep.execute()` phase 1. |
 
 ### Handler type
 
@@ -1514,3 +1527,513 @@ from tortoise_auth.events import emitter, on, emit, add_listener, remove_listene
 | `emit` | method | Alias for `emitter.emit`. |
 | `add_listener` | method | Alias for `emitter.add_listener`. |
 | `remove_listener` | method | Alias for `emitter.remove_listener`. |
+
+---
+
+## `tortoise_auth.onboarding`
+
+Protocol, dataclasses, and engine for the server-driven onboarding flow.
+
+### `OnboardingStepStatus`
+
+```python
+class OnboardingStepStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+```
+
+Enum tracking the state of each step in the pipeline.
+
+---
+
+### `StepContext`
+
+```python
+@dataclass(frozen=True, slots=True)
+class StepContext:
+    session_id: str
+    step_data: dict[str, Any]
+    user_id: str | None
+    config: AuthConfig
+```
+
+Immutable context passed to each step during execution and hint generation.
+
+| Field | Type | Description |
+|---|---|---|
+| `session_id` | `str` | The onboarding session ID. |
+| `step_data` | `dict[str, Any]` | Accumulated data from previous steps. |
+| `user_id` | `str \| None` | The user's primary key (string), or `None` until registration completes. |
+| `config` | `AuthConfig` | The active configuration. |
+
+---
+
+### `StepResult`
+
+```python
+@dataclass(frozen=True, slots=True)
+class StepResult:
+    success: bool
+    errors: list[str] = field(default_factory=list)
+    data: dict[str, Any] = field(default_factory=dict)
+    completed: bool = True
+```
+
+Result of step execution.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `success` | `bool` | | Whether the step execution succeeded. |
+| `errors` | `list[str]` | `[]` | Human-readable error messages on failure. |
+| `data` | `dict[str, Any]` | `{}` | Data to merge into `step_data`. |
+| `completed` | `bool` | `True` | Set to `False` for multi-phase steps to stay on the current step. |
+
+---
+
+### `FieldHint`
+
+```python
+@dataclass(frozen=True, slots=True)
+class FieldHint:
+    name: str
+    field_type: str
+    required: bool = True
+    label: str = ""
+    placeholder: str = ""
+    validation: dict[str, Any] = field(default_factory=dict)
+```
+
+Describes a single form field for the client to render.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | | Field name (used as the key in submitted data). |
+| `field_type` | `str` | | Field type hint: `"text"`, `"email"`, `"password"`, `"code"`, `"checkbox"`, etc. |
+| `required` | `bool` | `True` | Whether the field is required. |
+| `label` | `str` | `""` | Human-readable label. |
+| `placeholder` | `str` | `""` | Placeholder text. |
+| `validation` | `dict` | `{}` | Validation hints (e.g. `{"length": 6, "pattern": "^\\d{6}$"}`). |
+
+---
+
+### `ClientHint`
+
+```python
+@dataclass(frozen=True, slots=True)
+class ClientHint:
+    step_name: str
+    fields: list[FieldHint]
+    title: str = ""
+    description: str = ""
+    skippable: bool = False
+    extra: dict[str, Any] = field(default_factory=dict)
+```
+
+Describes what the client should render for the current step.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `step_name` | `str` | | Name of the current step. |
+| `fields` | `list[FieldHint]` | | Form fields to display. |
+| `title` | `str` | `""` | Step title for the UI. |
+| `description` | `str` | `""` | Step description for the UI. |
+| `skippable` | `bool` | `False` | Whether the client can offer a "Skip" action. |
+| `extra` | `dict` | `{}` | Additional step-specific data (e.g. `action`, `terms_url`, `provisioning_uri`). |
+
+---
+
+### `OnboardingResult`
+
+```python
+@dataclass(frozen=True, slots=True)
+class OnboardingResult:
+    session_token: str
+    current_step: str
+    status: str
+    client_hint: ClientHint | None
+    step_result: StepResult | None
+    auth_result: AuthResult | None
+    completed_steps: list[str] = field(default_factory=list)
+    remaining_steps: list[str] = field(default_factory=list)
+```
+
+Result returned by `OnboardingService` methods.
+
+| Field | Type | Description |
+|---|---|---|
+| `session_token` | `str` | The session token for the client. |
+| `current_step` | `str` | Name of the current step (empty when completed). |
+| `status` | `str` | `"in_progress"`, `"completed"`, or `"error"`. |
+| `client_hint` | `ClientHint \| None` | What the client should render. `None` when completed. |
+| `step_result` | `StepResult \| None` | Result of the last step execution. `None` on `start()`/`resume()`. |
+| `auth_result` | `AuthResult \| None` | Auth tokens, only present when `status="completed"`. |
+| `completed_steps` | `list[str]` | Names of completed or skipped steps. |
+| `remaining_steps` | `list[str]` | Names of steps not yet completed. |
+
+---
+
+### `OnboardingStep`
+
+```python
+@runtime_checkable
+class OnboardingStep(Protocol):
+```
+
+Protocol defining the interface for onboarding steps. Implement this to create
+custom steps.
+
+---
+
+#### `OnboardingStep.name`
+
+```python
+@property
+def name(self) -> str
+```
+
+**Returns:** The unique name of the step (e.g. `"register"`, `"verify_email"`).
+
+---
+
+#### `OnboardingStep.skippable`
+
+```python
+@property
+def skippable(self) -> bool
+```
+
+**Returns:** Whether the step can be skipped by the client.
+
+---
+
+#### `OnboardingStep.is_required`
+
+```python
+async def is_required(self, context: StepContext) -> bool
+```
+
+Determine whether this step is required for the current flow. Steps that return
+`False` are automatically skipped.
+
+---
+
+#### `OnboardingStep.execute`
+
+```python
+async def execute(
+    self,
+    context: StepContext,
+    data: dict[str, Any],
+) -> StepResult
+```
+
+Execute the step with submitted data.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `context` | `StepContext` | Current flow context. |
+| `data` | `dict[str, Any]` | Data submitted by the client. |
+
+**Returns:** A `StepResult`.
+
+---
+
+#### `OnboardingStep.client_hint`
+
+```python
+def client_hint(self, context: StepContext) -> ClientHint
+```
+
+Generate the `ClientHint` for the current state of this step.
+
+**Returns:** A `ClientHint` describing what the client should render.
+
+---
+
+## `tortoise_auth.onboarding.flow`
+
+### `OnboardingFlow`
+
+```python
+class OnboardingFlow:
+    def __init__(self, steps: dict[str, OnboardingStep]) -> None
+```
+
+Pure state machine engine that drives the pipeline. Contains no I/O of its own;
+delegates execution to step instances.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `steps` | `dict[str, OnboardingStep]` | Map of step name to step instance. |
+
+---
+
+#### `OnboardingFlow.get_next_step`
+
+```python
+async def get_next_step(
+    self,
+    pipeline: list[str],
+    current_index: int,
+    step_state: dict[str, str],
+    context: StepContext,
+) -> tuple[int, OnboardingStep] | None
+```
+
+Find the next required step starting from `current_index`. Automatically skips
+completed, skipped, and non-required steps.
+
+**Returns:** `(index, step)` or `None` if all steps are done.
+
+---
+
+#### `OnboardingFlow.execute_step`
+
+```python
+async def execute_step(
+    self,
+    step: OnboardingStep,
+    context: StepContext,
+    data: dict[str, Any],
+) -> StepResult
+```
+
+Delegate execution to a step.
+
+---
+
+#### `OnboardingFlow.handle_skip`
+
+```python
+def handle_skip(self, step: OnboardingStep) -> StepResult
+```
+
+Attempt to skip a step. Returns `StepResult(success=False)` if the step is not
+skippable.
+
+---
+
+#### `OnboardingFlow.is_complete`
+
+```python
+def is_complete(
+    self,
+    pipeline: list[str],
+    step_state: dict[str, str],
+) -> bool
+```
+
+**Returns:** `True` if all pipeline steps are completed or skipped.
+
+---
+
+## `tortoise_auth.onboarding.service`
+
+### `OnboardingService`
+
+```python
+class OnboardingService:
+    def __init__(
+        self,
+        config: AuthConfig | None = None,
+        *,
+        steps: dict[str, OnboardingStep] | None = None,
+        pipeline: list[str] | None = None,
+        rate_limiter: RateLimitBackend | None = None,
+    ) -> None
+```
+
+High-level service for managing onboarding flows. Handles session persistence,
+step orchestration, event emission, and token issuance on completion.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `config` | `AuthConfig \| None` | `None` | Configuration override. Falls back to `get_config()`. |
+| `steps` | `dict[str, OnboardingStep] \| None` | `None` | Map of step name to step instance. |
+| `pipeline` | `list[str] \| None` | `None` | Ordered list of step names. Defaults to the keys of `steps`. |
+| `rate_limiter` | `RateLimitBackend \| None` | `None` | Optional rate limiter for `start()` and `advance()`. |
+
+---
+
+#### `OnboardingService.start`
+
+```python
+async def start(
+    self,
+    email: str,
+    *,
+    ip_address: str = "",
+) -> OnboardingResult
+```
+
+Start a new onboarding flow. Creates an `OnboardingSession`, invalidates
+previous sessions for the same email (if configured), and returns the first
+step's `client_hint`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `email` | `str` | | The email address to onboard. |
+| `ip_address` | `str` | `""` | Client IP address (stored for auditing). |
+
+**Returns:** An `OnboardingResult` with `status="in_progress"`.
+
+**Raises:**
+
+| Exception | Condition |
+|---|---|
+| `RateLimitError` | Rate limiter is configured and the email/IP is throttled. |
+
+**Events emitted:** `onboarding_started`
+
+---
+
+#### `OnboardingService.advance`
+
+```python
+async def advance(
+    self,
+    session_token: str,
+    data: dict[str, Any],
+    *,
+    skip: bool = False,
+) -> OnboardingResult
+```
+
+Execute (or skip) the current step and advance the flow. When the last step
+completes, issues auth tokens via `AuthService`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `session_token` | `str` | | The raw session token. |
+| `data` | `dict[str, Any]` | | Data submitted by the client. |
+| `skip` | `bool` | `False` | Skip the current step instead of executing it. |
+
+**Returns:** An `OnboardingResult`. Check `status` for `"in_progress"`,
+`"completed"`, or `"error"`.
+
+**Raises:**
+
+| Exception | Condition |
+|---|---|
+| `OnboardingSessionExpiredError` | The session has expired. |
+| `OnboardingSessionInvalidError` | The session is not found or invalidated. |
+| `OnboardingFlowCompleteError` | The flow has already been completed. |
+
+**Events emitted:** `onboarding_step_completed`, `onboarding_step_skipped`,
+`onboarding_step_failed`, `onboarding_completed`
+
+---
+
+#### `OnboardingService.resume`
+
+```python
+async def resume(self, session_token: str) -> OnboardingResult
+```
+
+Resume an existing flow without executing anything. Returns the current step's
+`client_hint`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `session_token` | `str` | The raw session token. |
+
+**Returns:** An `OnboardingResult` with `step_result=None`.
+
+**Raises:**
+
+| Exception | Condition |
+|---|---|
+| `OnboardingSessionExpiredError` | The session has expired. |
+| `OnboardingSessionInvalidError` | The session is not found or invalidated. |
+| `OnboardingFlowCompleteError` | The flow has already been completed. |
+
+---
+
+#### `OnboardingService.cleanup_expired`
+
+```python
+async def cleanup_expired(self) -> int
+```
+
+Delete expired onboarding sessions from the database. Call periodically to keep
+the table lean.
+
+**Returns:** The number of deleted sessions.
+
+---
+
+## `tortoise_auth.models.onboarding`
+
+### `OnboardingSession`
+
+```python
+class OnboardingSession(Model):
+    class Meta:
+        table = "tortoise_auth_onboarding_sessions"
+```
+
+Database model tracking an in-progress onboarding flow. Stores a SHA-256 hash
+of the session token (never the raw value).
+
+#### Fields
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `IntField` | `primary_key=True` | Auto-incrementing primary key. |
+| `token_hash` | `CharField(64)` | `unique=True, db_index=True` | SHA-256 hex digest of the raw session token. |
+| `email` | `CharField(255)` | `db_index=True` | Email address being onboarded. |
+| `user_id` | `CharField(255)` | `db_index=True, default=""` | User primary key (set after registration). |
+| `pipeline` | `TextField` | | JSON array of step names. |
+| `current_step_index` | `IntField` | `default=0` | Index of the current step in the pipeline. |
+| `step_state` | `TextField` | `default="{}"` | JSON object mapping step names to statuses. |
+| `step_data` | `TextField` | `default="{}"` | JSON object of accumulated step data. |
+| `ip_address` | `CharField(45)` | `default=""` | Client IP address. |
+| `created_at` | `DatetimeField` | `auto_now_add=True` | Session creation timestamp. |
+| `expires_at` | `DatetimeField` | | Absolute expiration timestamp. |
+| `completed_at` | `DatetimeField` | `null=True, default=None` | Flow completion timestamp. |
+| `is_invalidated` | `BooleanField` | `default=False` | Whether the session has been invalidated. |
+
+---
+
+#### `OnboardingSession.is_expired`
+
+```python
+@property
+def is_expired(self) -> bool
+```
+
+**Returns:** `True` if `expires_at` is in the past.
+
+---
+
+#### `OnboardingSession.is_valid`
+
+```python
+@property
+def is_valid(self) -> bool
+```
+
+**Returns:** `True` if the session is not invalidated, not expired, and not
+completed.
+
+---
+
+#### `hash_session_token`
+
+```python
+def hash_session_token(raw: str) -> str
+```
+
+Return the SHA-256 hex digest of a raw session token.
+
+---
+
+#### `generate_session_token`
+
+```python
+def generate_session_token(length: int) -> str
+```
+
+Generate a cryptographically secure random session token.

@@ -144,6 +144,23 @@ relevant when using the JWT backend — the database backend ignores them.
 
 ---
 
+## Onboarding
+
+These fields configure the multi-step onboarding flow engine
+(`OnboardingService`). They are only relevant when using the onboarding
+feature.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `onboarding_session_lifetime` | `int` | `3600` | Onboarding session lifetime in **seconds**. The default of 3600 seconds equals 1 hour. |
+| `onboarding_session_token_length` | `int` | `64` | Length of the random session token generated for each onboarding flow. Must be at least 32. |
+| `onboarding_require_totp` | `bool` | `False` | Whether TOTP setup is required during onboarding. When `True`, `SetupTOTPStep` becomes mandatory and cannot be skipped. |
+| `onboarding_max_verification_attempts` | `int` | `5` | Maximum number of incorrect verification code attempts before the session is invalidated. |
+| `onboarding_verification_code_ttl` | `int` | `600` | Verification code lifetime in **seconds**. The default of 600 seconds equals 10 minutes. Codes older than this are rejected. |
+| `onboarding_invalidate_previous_sessions` | `bool` | `True` | Whether to invalidate existing onboarding sessions for the same email when `start()` is called. Prevents session fixation and concurrent session issues. |
+
+---
+
 ## Validation Rules
 
 Calling `AuthConfig.validate()` can be used to enforce configuration constraints
@@ -209,5 +226,13 @@ configure(AuthConfig(
     jwt_issuer="myapp",
     jwt_audience="myapi",
     jwt_blacklist_enabled=True,
+
+    # Onboarding (only needed when using OnboardingService)
+    onboarding_session_lifetime=3600,
+    onboarding_session_token_length=64,
+    onboarding_require_totp=False,
+    onboarding_max_verification_attempts=5,
+    onboarding_verification_code_ttl=600,
+    onboarding_invalidate_previous_sessions=True,
 ))
 ```

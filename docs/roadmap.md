@@ -25,21 +25,22 @@ The following features are implemented and available in the current release:
   `user_logout`, and `password_changed` events.
 - **Global configuration** -- single `AuthConfig` dataclass to configure the
   entire library.
+- **Rate limiting** -- pluggable backends (in-memory and database) for login
+  attempt throttling. Starlette middleware included.
+- **Onboarding flow engine** -- server-driven, multi-step onboarding with a
+  state machine that guides the client through register → verify email → TOTP
+  setup → profile completion. Pluggable via the `OnboardingStep` Protocol.
+  Built-in steps: `RegisterStep`, `VerifyEmailStep`, `SetupTOTPStep`,
+  `ProfileCompletionStep`.
 
 ## Planned Features
 
 These features are on the roadmap and under active consideration:
 
-- **Email verification flow** -- built-in workflow for verifying user email
-  addresses after registration.
 - **Password reset flow** -- secure token-based password reset with configurable
   expiry.
 - **API key authentication** -- long-lived keys for service-to-service or
   programmatic access.
-- **TOTP / 2FA** -- time-based one-time passwords for two-factor authentication.
-  The dependencies (`pyotp`, `qrcode`) are already included.
-- **Rate limiting** -- configurable throttling for login attempts and other
-  sensitive endpoints.
 - **Framework integrations** -- first-party middleware and dependency injection
   for FastAPI, Starlette, and Litestar.
 

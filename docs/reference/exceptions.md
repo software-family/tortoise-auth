@@ -16,13 +16,19 @@ TortoiseAuthError
 ├── InvalidHashError
 ├── ConfigurationError
 ├── EventError
+├── RateLimitError
 ├── TokenError
 │   ├── TokenExpiredError
 │   ├── TokenInvalidError
 │   └── TokenRevokedError
-└── SigningError
-    ├── SignatureExpiredError
-    └── BadSignatureError
+├── SigningError
+│   ├── SignatureExpiredError
+│   └── BadSignatureError
+└── OnboardingError
+    ├── OnboardingSessionExpiredError
+    ├── OnboardingSessionInvalidError
+    ├── OnboardingStepError
+    └── OnboardingFlowCompleteError
 ```
 
 ---
@@ -249,6 +255,66 @@ token has been tampered with or was signed with a different secret.
 
 ---
 
+### OnboardingError
+
+| Detail   | Value                          |
+|----------|--------------------------------|
+| Parent   | `TortoiseAuthError`            |
+
+Base class for all onboarding flow errors. Catch this when you want a single handler for
+any onboarding problem.
+
+---
+
+### OnboardingSessionExpiredError
+
+| Detail     | Value                          |
+|------------|--------------------------------|
+| Parent     | `OnboardingError`              |
+| Attribute  | `session_id: str`              |
+
+Raised when an onboarding session has exceeded its configured lifetime
+(`onboarding_session_lifetime`). The user must start a new onboarding flow.
+
+---
+
+### OnboardingSessionInvalidError
+
+| Detail     | Value                          |
+|------------|--------------------------------|
+| Parent     | `OnboardingError`              |
+| Attribute  | `reason: str`                  |
+
+Raised when an onboarding session cannot be found, has been invalidated (e.g., because a
+newer session was started for the same email), or is otherwise unusable. The `reason`
+attribute provides a human-readable explanation.
+
+---
+
+### OnboardingStepError
+
+| Detail     | Value                          |
+|------------|--------------------------------|
+| Parent     | `OnboardingError`              |
+| Attribute  | `step_name: str`               |
+| Attribute  | `errors: list[str]`            |
+
+Raised when an onboarding step fails. The `step_name` identifies which step failed and
+the `errors` list contains one or more human-readable error messages.
+
+---
+
+### OnboardingFlowCompleteError
+
+| Detail   | Value                          |
+|----------|--------------------------------|
+| Parent   | `OnboardingError`              |
+
+Raised when attempting to `advance()` or `resume()` a flow that has already been
+completed. The client should use the auth tokens it received at completion.
+
+---
+
 ## Catch patterns
 
 Use the hierarchy to write precise or broad exception handlers depending on your needs.
@@ -285,6 +351,40 @@ try:
     data = signer.unsign(token)
 except SigningError:
     # covers SignatureExpiredError, BadSignatureError
+    ...
+```
+
+### Catch all onboarding errors
+
+```python
+from tortoise_auth.exceptions import OnboardingError
+
+try:
+    result = await onboarding.advance(token, data)
+except OnboardingError:
+    # covers expired, invalid, step errors, and flow-complete
+    ...
+```
+
+### Distinguish between onboarding failure reasons
+
+```python
+from tortoise_auth.exceptions import (
+    OnboardingFlowCompleteError,
+    OnboardingSessionExpiredError,
+    OnboardingSessionInvalidError,
+)
+
+try:
+    result = await onboarding.advance(token, data)
+except OnboardingSessionExpiredError:
+    # 410 Gone — prompt user to start over
+    ...
+except OnboardingSessionInvalidError:
+    # 404 Not Found — session not found or invalidated
+    ...
+except OnboardingFlowCompleteError:
+    # 409 Conflict — flow already completed
     ...
 ```
 
