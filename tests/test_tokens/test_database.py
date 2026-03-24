@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -120,7 +120,7 @@ class TestDatabaseBackendVerifyToken:
         backend = DatabaseTokenBackend(make_config())
         pair = await backend.create_tokens("42")
         # Force expiration
-        past = datetime(2020, 1, 1, tzinfo=UTC)
+        past = datetime(2020, 1, 1, tzinfo=timezone.utc)
         await AccessToken.filter(token_hash=hash_token(pair.access_token)).update(expires_at=past)
         with pytest.raises(TokenExpiredError):
             await backend.verify_token(pair.access_token)
@@ -207,7 +207,7 @@ class TestDatabaseBackendCleanup:
     async def test_deletes_expired(self):
         backend = DatabaseTokenBackend(make_config())
         pair = await backend.create_tokens("42")
-        past = datetime(2020, 1, 1, tzinfo=UTC)
+        past = datetime(2020, 1, 1, tzinfo=timezone.utc)
         await AccessToken.filter(token_hash=hash_token(pair.access_token)).update(expires_at=past)
         await RefreshToken.filter(token_hash=hash_token(pair.refresh_token)).update(expires_at=past)
         deleted = await backend.cleanup_expired()

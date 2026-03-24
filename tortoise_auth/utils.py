@@ -1,5 +1,7 @@
 """Utility functions for tortoise-auth."""
 
+from __future__ import annotations
+
 import hmac
 import secrets
 import string

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from tortoise_auth.config import AuthConfig, get_config
@@ -35,7 +35,7 @@ class DatabaseTokenBackend:
         )
 
         cfg = self.config
-        now = datetime.now(tz=UTC)
+        now = datetime.now(tz=timezone.utc)
 
         access_raw = generate_token(cfg.token_length)
         access_jti = uuid.uuid4().hex
@@ -112,7 +112,7 @@ class DatabaseTokenBackend:
         """Delete expired token rows, return count deleted."""
         from tortoise_auth.models.tokens import AccessToken, RefreshToken
 
-        now = datetime.now(tz=UTC)
+        now = datetime.now(tz=timezone.utc)
         access_deleted = await AccessToken.filter(expires_at__lt=now).delete()
         refresh_deleted = await RefreshToken.filter(expires_at__lt=now).delete()
         return access_deleted + refresh_deleted
