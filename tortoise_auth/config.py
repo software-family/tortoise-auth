@@ -67,6 +67,11 @@ class AuthConfig:
     jwt_audience: str = ""
     jwt_blacklist_enabled: bool = False
 
+    # Password reset
+    password_reset_token_lifetime: int = 3600  # 1 hour
+    password_reset_rate_limit_max_attempts: int = 3
+    password_reset_rate_limit_window: int = 300  # 5 minutes
+
     # Onboarding settings
     onboarding_session_lifetime: int = 3600
     onboarding_session_token_length: int = 64
@@ -74,6 +79,10 @@ class AuthConfig:
     onboarding_max_verification_attempts: int = 5
     onboarding_verification_code_ttl: int = 600
     onboarding_invalidate_previous_sessions: bool = True
+
+    # S2S authentication
+    s2s_enabled: bool = False
+    s2s_token_env_var: str = "S2S_AUTH_TOKEN"
 
     def validate(self) -> None:
         """Validate config. Raises ConfigurationError."""
@@ -93,6 +102,14 @@ class AuthConfig:
             raise ConfigurationError("onboarding_session_token_length must be at least 32")
         if self.onboarding_max_verification_attempts <= 0:
             raise ConfigurationError("onboarding_max_verification_attempts must be positive")
+        if self.password_reset_token_lifetime <= 0:
+            raise ConfigurationError("password_reset_token_lifetime must be positive")
+        if self.password_reset_rate_limit_max_attempts <= 0:
+            raise ConfigurationError("password_reset_rate_limit_max_attempts must be positive")
+        if self.password_reset_rate_limit_window <= 0:
+            raise ConfigurationError("password_reset_rate_limit_window must be positive")
+        if self.s2s_enabled and not self.s2s_token_env_var:
+            raise ConfigurationError("s2s_token_env_var must be non-empty when s2s_enabled is True")
 
     @property
     def effective_signing_secret(self) -> str:

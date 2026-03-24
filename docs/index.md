@@ -22,6 +22,7 @@ tortoise-auth covers the most common authentication scenarios out of the box:
 | **User registration & login** | `AbstractUser`, `AuthService.login` |
 | **Multi-step onboarding** | `OnboardingService` — server-driven register → verify → TOTP flow |
 | **Protected API endpoints** | `AuthService.authenticate`, Starlette `TokenAuthBackend` |
+| **Server-to-server auth** | `S2SService`, Starlette `S2SAuthBackend` |
 | **Token refresh rotation** | `AuthService.refresh` |
 | **Email verification** | `make_token` / `verify_token` (HMAC signing) |
 | **Password reset** | `make_token` / `verify_token` with `max_age` |
@@ -57,8 +58,11 @@ See the [Use Cases & Cookbook](guides/use-cases.md) for complete, copy-pasteable
   completion. Pluggable via the `OnboardingStep` Protocol.
 - **Event system** -- subscribe to `user_login`, `user_login_failed`,
   `user_logout`, and `password_changed` events with async handlers.
-- **Starlette integration** -- `TokenAuthBackend`, `login_required` decorator,
-  and `require_auth` helper for Starlette and FastAPI apps.
+- **Server-to-server authentication** -- `S2SService` for service-to-service
+  communication using env-var-based tokens with constant-time comparison.
+- **Starlette integration** -- `TokenAuthBackend`, `S2SAuthBackend`,
+  `login_required` decorator, and `require_auth` / `require_s2s` helpers for
+  Starlette and FastAPI apps.
 - **Fully async** -- every I/O operation uses `await`; no hidden synchronous
   calls.
 
@@ -116,6 +120,7 @@ pip install tortoise-auth
 - :material-signature: **[Signing (HMAC)](guides/signing.md)** -- Signed tokens for email verification and resets
 - :material-account-plus: **[Onboarding Flow](guides/onboarding.md)** -- Server-driven multi-step registration
 - :material-bell: **[Events](guides/events.md)** -- React to login, logout, and password changes
+- :material-server-network: **[S2S Authentication](guides/s2s.md)** -- Service-to-service auth with env-var tokens
 - :material-language-python: **[Starlette Integration](integrations/starlette.md)** -- Middleware, decorators, and protected routes
 - :material-book-open: **[Use Cases & Cookbook](guides/use-cases.md)** -- Real-world examples you can copy-paste
 
@@ -128,4 +133,4 @@ guide to set up your first project with tortoise-auth in under five minutes.
 
 ---
 
-<small>Version 0.2.0</small>
+<small>Version 0.4.0</small>

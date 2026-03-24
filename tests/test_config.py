@@ -61,3 +61,24 @@ class TestAuthConfigJWTDefaults:
         assert cfg.jwt_issuer == "myapp"
         assert cfg.jwt_audience == "myapi"
         assert cfg.jwt_blacklist_enabled is True
+
+
+class TestAuthConfigS2S:
+    def test_s2s_defaults(self):
+        cfg = AuthConfig()
+        assert cfg.s2s_enabled is False
+        assert cfg.s2s_token_env_var == "S2S_AUTH_TOKEN"
+
+    def test_s2s_fields_can_be_set(self):
+        cfg = AuthConfig(s2s_enabled=True, s2s_token_env_var="MY_TOKEN")
+        assert cfg.s2s_enabled is True
+        assert cfg.s2s_token_env_var == "MY_TOKEN"
+
+    def test_validation_rejects_empty_env_var_when_enabled(self):
+        cfg = AuthConfig(s2s_enabled=True, s2s_token_env_var="")
+        with pytest.raises(ConfigurationError, match="s2s_token_env_var"):
+            cfg.validate()
+
+    def test_validation_passes_when_disabled_with_empty_env_var(self):
+        cfg = AuthConfig(s2s_enabled=False, s2s_token_env_var="")
+        cfg.validate()  # Should not raise

@@ -28,15 +28,19 @@ if TYPE_CHECKING:
 
     from tortoise_auth.rate_limit import RateLimitBackend
 
-from tortoise_auth.exceptions import AuthenticationError, TokenError
+from tortoise_auth.exceptions import AuthenticationError, ConfigurationError, TokenError
 from tortoise_auth.services import AuthService
+from tortoise_auth.services.s2s import S2SService
 
 __all__ = [
     "AnonymousUser",
     "RateLimitMiddleware",
+    "S2SAuthBackend",
+    "ServiceIdentity",
     "TokenAuthBackend",
     "login_required",
     "require_auth",
+    "require_s2s",
 ]
 
 
@@ -190,3 +194,87 @@ class RateLimitMiddleware:
             return
 
         await self.app(scope, receive, send)
+
+
+class ServiceIdentity:
+    """Authenticated service placeholder for S2S requests.
+
+    Compatible with Starlette's ``BaseUser`` protocol.
+    """
+
+    def __init__(self, service_name: str | None = None) -> None:
+        self._service_name = service_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def is_anonymous(self) -> bool:
+        return False
+
+    @property
+    def display_name(self) -> str:
+        return self._service_name or "service"
+
+    @property
+    def service_name(self) -> str | None:
+        return self._service_name
+
+
+class S2SAuthBackend(AuthenticationBackend):
+    """Bearer-token S2S authentication backend for Starlette's ``AuthenticationMiddleware``."""
+
+    def __init__(
+        self,
+        s2s_service: S2SService | None = None,
+        *,
+        scopes: tuple[str, ...] = ("authenticated", "s2s"),
+        service_name_header: str | None = "X-Service-Name",
+    ) -> None:
+        self._s2s_service = s2s_service
+        self._scopes = scopes
+        self._service_name_header = service_name_header
+
+    @property
+    def s2s_service(self) -> S2SService:
+        if self._s2s_service is None:
+            self._s2s_service = S2SService()
+        return self._s2s_service
+
+    async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, Any]:
+        anonymous = (AuthCredentials([]), AnonymousUser())
+
+        authorization = conn.headers.get("Authorization")
+        if not authorization:
+            return anonymous
+
+        parts = authorization.split(" ", 1)
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            return anonymous
+
+        token = parts[1]
+        service_name: str | None = None
+        if self._service_name_header:
+            service_name = conn.headers.get(self._service_name_header)
+
+        try:
+            result = await self.s2s_service.authenticate(token, service_name=service_name)
+        except (AuthenticationError, ConfigurationError):
+            return anonymous
+
+        return AuthCredentials(list(self._scopes)), ServiceIdentity(result.service_name)
+
+
+def require_s2s(request: Request) -> ServiceIdentity:
+    """Extract the authenticated service identity or raise ``AuthenticationError``.
+
+    Use this in route handlers that require S2S authentication::
+
+        async def internal_route(request: Request) -> Response:
+            svc = require_s2s(request)
+            return JSONResponse({"service": svc.display_name})
+    """
+    if not request.user.is_authenticated or not isinstance(request.user, ServiceIdentity):
+        raise AuthenticationError("S2S authentication required")
+    return request.user

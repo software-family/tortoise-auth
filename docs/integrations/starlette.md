@@ -8,11 +8,15 @@ required.
 
 The integration provides:
 
-- **`TokenAuthBackend`** -- a Bearer-token authentication backend for the
-  middleware.
+- **`TokenAuthBackend`** -- a Bearer-token authentication backend for user
+  tokens.
+- **`S2SAuthBackend`** -- a Bearer-token authentication backend for
+  server-to-server tokens.
 - **`login_required`** -- a decorator to reject unauthenticated requests.
 - **`require_auth()`** -- a helper to extract the authenticated user or raise.
+- **`require_s2s()`** -- a helper to extract the authenticated service or raise.
 - **`AnonymousUser`** -- a placeholder object for unauthenticated requests.
+- **`ServiceIdentity`** -- a placeholder object for S2S-authenticated requests.
 
 ---
 
@@ -386,6 +390,59 @@ Placeholder object set on `request.user` when no valid token is present.
 | `is_authenticated` | `False` |
 | `is_anonymous`     | `True`  |
 | `display_name`     | `""`    |
+
+---
+
+## S2S authentication backend
+
+For server-to-server authentication, use `S2SAuthBackend` instead of
+`TokenAuthBackend`. See the dedicated
+[S2S Authentication](../guides/s2s.md) guide for full details.
+
+```python
+from tortoise_auth.integrations.starlette import S2SAuthBackend
+
+app.add_middleware(AuthenticationMiddleware, backend=S2SAuthBackend())
+```
+
+### `S2SAuthBackend`
+
+```python
+class S2SAuthBackend(AuthenticationBackend):
+    def __init__(
+        self,
+        s2s_service: S2SService | None = None,
+        *,
+        scopes: tuple[str, ...] = ("authenticated", "s2s"),
+        service_name_header: str | None = "X-Service-Name",
+    ) -> None: ...
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `s2s_service` | `S2SService \| None` | `None` | Service instance to use. If `None`, a new `S2SService()` is created lazily. |
+| `scopes` | `tuple[str, ...]` | `("authenticated", "s2s")` | Scopes granted to authenticated services. |
+| `service_name_header` | `str \| None` | `"X-Service-Name"` | Header to read the calling service name from. Set to `None` to disable. |
+
+### `require_s2s`
+
+```python
+def require_s2s(request: Request) -> ServiceIdentity
+```
+
+Returns the `ServiceIdentity` from `request.user`. Raises
+`AuthenticationError` if the request is not S2S-authenticated.
+
+### `ServiceIdentity`
+
+Placeholder object set on `request.user` when a valid S2S token is present.
+
+| Property | Returns |
+|---|---|
+| `is_authenticated` | `True` |
+| `is_anonymous` | `False` |
+| `display_name` | Service name or `"service"` |
+| `service_name` | The `X-Service-Name` header value, or `None` |
 
 ---
 

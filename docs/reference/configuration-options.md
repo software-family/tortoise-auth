@@ -161,6 +161,23 @@ feature.
 
 ---
 
+## S2S Authentication
+
+These fields configure the server-to-server authentication service
+(`S2SService`). They are only relevant when using the S2S feature.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `s2s_enabled` | `bool` | `False` | Enable S2S authentication. When `False`, `S2SService.authenticate()` raises `ConfigurationError`. Explicit opt-in prevents accidental exposure. |
+| `s2s_token_env_var` | `str` | `"S2S_AUTH_TOKEN"` | Name of the environment variable that holds the valid bearer token(s). Supports comma-separated values for token rotation. Must be non-empty when `s2s_enabled` is `True`. |
+
+!!! tip
+    The token is read from the environment on every call to `authenticate()`,
+    so you can rotate tokens by updating the env var without restarting
+    the application.
+
+---
+
 ## Validation Rules
 
 Calling `AuthConfig.validate()` can be used to enforce configuration constraints
@@ -234,5 +251,9 @@ configure(AuthConfig(
     onboarding_max_verification_attempts=5,
     onboarding_verification_code_ttl=600,
     onboarding_invalidate_previous_sessions=True,
+
+    # S2S authentication (only needed when using S2SService)
+    s2s_enabled=True,
+    s2s_token_env_var="S2S_AUTH_TOKEN",
 ))
 ```

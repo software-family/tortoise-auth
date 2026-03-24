@@ -260,6 +260,7 @@ The classes that accept an optional `config`:
 | Class | Module |
 |---|---|
 | `AuthService` | `tortoise_auth.services.auth` |
+| `S2SService` | `tortoise_auth.services.s2s` |
 | `DatabaseTokenBackend` | `tortoise_auth.tokens.database` |
 
 Each of these classes resolves the config lazily through a `config` property:
