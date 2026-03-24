@@ -1,6 +1,6 @@
 [project]
 name = "tortoise-auth"
-version = "0.5.0"
+version = "0.6.0"
 description = "Async authentication and user management for Tortoise ORM. Framework-agnostic, extensible, secure by default."
 requires-python = ">=3.10"
 license = "MIT"

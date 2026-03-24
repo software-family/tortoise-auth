@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import jwt
 import pytest
@@ -298,7 +298,7 @@ class TestJWTBackendCleanup:
         backend = JWTBackend(make_blacklist_config())
         pair = await backend.create_tokens("42")
         # Force expiration on outstanding tokens
-        past = datetime(2020, 1, 1, tzinfo=UTC)
+        past = datetime(2020, 1, 1, tzinfo=timezone.utc)
         await OutstandingToken.filter(user_id="42").update(expires_at=past)
         # Blacklist one of them
         access_jti = jwt.decode(pair.access_token, SECRET, algorithms=["HS256"])["jti"]

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 from starlette.middleware.authentication import AuthenticationMiddleware
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
@@ -18,6 +19,9 @@ from tortoise_auth.integrations.starlette import (
     require_auth,
 )
 from tortoise_auth.services.auth import AuthService
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 
 def make_config(**overrides: object) -> AuthConfig:

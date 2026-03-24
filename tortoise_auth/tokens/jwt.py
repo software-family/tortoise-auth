@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import jwt
@@ -72,7 +72,7 @@ class JWTBackend:
         if cfg.jwt_blacklist_enabled:
             from tortoise_auth.models.jwt_blacklist import OutstandingToken
 
-            now_dt = datetime.fromtimestamp(now, tz=UTC)
+            now_dt = datetime.fromtimestamp(now, tz=timezone.utc)
             await OutstandingToken.bulk_create(
                 [
                     OutstandingToken(
@@ -81,7 +81,7 @@ class JWTBackend:
                         token_type="access",
                         created_at=now_dt,
                         expires_at=datetime.fromtimestamp(
-                            now_int + cfg.access_token_lifetime, tz=UTC
+                            now_int + cfg.access_token_lifetime, tz=timezone.utc
                         ),
                     ),
                     OutstandingToken(
@@ -90,7 +90,7 @@ class JWTBackend:
                         token_type="refresh",
                         created_at=now_dt,
                         expires_at=datetime.fromtimestamp(
-                            now_int + cfg.refresh_token_lifetime, tz=UTC
+                            now_int + cfg.refresh_token_lifetime, tz=timezone.utc
                         ),
                     ),
                 ]
@@ -184,7 +184,7 @@ class JWTBackend:
         """Delete expired outstanding tokens and their blacklist entries."""
         from tortoise_auth.models.jwt_blacklist import BlacklistedToken, OutstandingToken
 
-        now = datetime.now(tz=UTC)
+        now = datetime.now(tz=timezone.utc)
         expired_jtis = list(
             await OutstandingToken.filter(expires_at__lt=now).values_list("jti", flat=True)
         )

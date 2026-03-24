@@ -1,6 +1,6 @@
 """Tests for the database rate limiting backend."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -60,7 +60,7 @@ class TestDatabaseCheck:
 
     async def test_old_attempts_outside_window(self, backend: DatabaseRateLimitBackend) -> None:
         # Create attempts outside the window using explicit timestamps
-        old_time = datetime.now(tz=UTC) - timedelta(seconds=120)
+        old_time = datetime.now(tz=timezone.utc) - timedelta(seconds=120)
         for _ in range(3):
             await LoginAttempt.create(
                 identifier="user@example.com",
@@ -111,7 +111,7 @@ class TestDatabaseReset:
 
 class TestDatabaseCleanup:
     async def test_cleanup_removes_expired(self, backend: DatabaseRateLimitBackend) -> None:
-        old_time = datetime.now(tz=UTC) - timedelta(seconds=120)
+        old_time = datetime.now(tz=timezone.utc) - timedelta(seconds=120)
         await LoginAttempt.create(identifier="old@example.com", attempted_at=old_time)
         await backend.record("new@example.com")
         deleted = await backend.cleanup_expired()

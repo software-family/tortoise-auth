@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from tortoise_auth.config import AuthConfig, get_config
 from tortoise_auth.rate_limit import RateLimitResult
@@ -23,7 +23,7 @@ class DatabaseRateLimitBackend:
         from tortoise_auth.models.rate_limit import LoginAttempt
 
         cfg = self.config
-        window_start = datetime.now(tz=UTC) - timedelta(seconds=cfg.rate_limit_window)
+        window_start = datetime.now(tz=timezone.utc) - timedelta(seconds=cfg.rate_limit_window)
         total = await LoginAttempt.filter(
             identifier=key,
             attempted_at__gte=window_start,
@@ -45,7 +45,7 @@ class DatabaseRateLimitBackend:
                     (
                         oldest.attempted_at
                         + timedelta(seconds=cfg.rate_limit_lockout)
-                        - datetime.now(tz=UTC)
+                        - datetime.now(tz=timezone.utc)
                     ).total_seconds()
                 )
                 retry_after = max(retry_after, 1)
@@ -71,7 +71,7 @@ class DatabaseRateLimitBackend:
 
         await LoginAttempt.create(
             identifier=key,
-            attempted_at=datetime.now(tz=UTC),
+            attempted_at=datetime.now(tz=timezone.utc),
         )
 
     async def reset(self, key: str) -> None:
@@ -84,5 +84,5 @@ class DatabaseRateLimitBackend:
         """Delete expired attempt records. Returns count deleted."""
         from tortoise_auth.models.rate_limit import LoginAttempt
 
-        cutoff = datetime.now(tz=UTC) - timedelta(seconds=self.config.rate_limit_window)
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=self.config.rate_limit_window)
         return await LoginAttempt.filter(attempted_at__lt=cutoff).delete()
