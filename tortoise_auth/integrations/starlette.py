@@ -259,9 +259,7 @@ class S2SAuthBackend(AuthenticationBackend):
             service_name = conn.headers.get(self._service_name_header)
 
         try:
-            result = await self.s2s_service.authenticate(
-                token, service_name=service_name
-            )
+            result = await self.s2s_service.authenticate(token, service_name=service_name)
         except (AuthenticationError, ConfigurationError):
             return anonymous
 

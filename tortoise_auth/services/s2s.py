@@ -32,9 +32,7 @@ class S2SService:
     def config(self) -> AuthConfig:
         return self._config or get_config()
 
-    async def authenticate(
-        self, token: str, *, service_name: str | None = None
-    ) -> S2SAuthResult:
+    async def authenticate(self, token: str, *, service_name: str | None = None) -> S2SAuthResult:
         """Verify an S2S bearer token against the configured environment variable.
 
         Args:
