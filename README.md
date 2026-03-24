@@ -16,7 +16,7 @@ production-ready auth layer that works with FastAPI, Starlette, Sanic, or any
 other async Python framework.
 
 > [!WARNING]
-> **This project is under active development (v0.2.0, Alpha).** The public API
+> **This project is under active development (v0.4.0, Alpha).** The public API
 > may change between releases. Use in production at your own risk.
 
 **[Documentation](https://tortoise-auth.softwarefamily.fr/)** |
@@ -34,6 +34,7 @@ other async Python framework.
   - [Login and Logout](#login-and-logout)
   - [Token Refresh Rotation](#token-refresh-rotation)
   - [Starlette / FastAPI Integration](#starlette--fastapi-integration)
+  - [Server-to-Server Authentication](#server-to-server-authentication)
   - [Email Verification](#email-verification)
   - [Password Reset](#password-reset)
   - [Password Validation](#password-validation)
@@ -66,8 +67,12 @@ other async Python framework.
   URLs, and other signed payloads.
 - **Event system** -- subscribe to `user_login`, `user_login_failed`,
   `user_logout`, and `password_changed` events with async handlers.
-- **Starlette integration** -- `TokenAuthBackend`, `login_required` decorator,
-  and `require_auth` helper for Starlette and FastAPI apps.
+- **Server-to-server authentication** -- `S2SService` for service-to-service
+  communication using static bearer tokens from environment variables, with
+  constant-time comparison and token rotation support.
+- **Starlette integration** -- `TokenAuthBackend`, `S2SAuthBackend`,
+  `login_required` decorator, and `require_auth` / `require_s2s` helpers for
+  Starlette and FastAPI apps.
 - **Fully async** -- every I/O operation uses `await`; no hidden synchronous
   calls.
 
@@ -195,6 +200,49 @@ app = Starlette(
         Middleware(AuthenticationMiddleware, backend=TokenAuthBackend()),
     ],
 )
+```
+
+### Server-to-Server Authentication
+
+For internal microservice communication where no user is involved, use
+`S2SService` with a shared token stored in an environment variable:
+
+```python
+import os
+from tortoise_auth import AuthConfig, S2SService, configure
+
+# Configure with S2S enabled
+configure(AuthConfig(
+    user_model="models.User",
+    s2s_enabled=True,
+    s2s_token_env_var="S2S_AUTH_TOKEN",  # default
+))
+
+# Set the token in the environment (or via your deployment config)
+# export S2S_AUTH_TOKEN="my-secret-service-token"
+
+# Verify an incoming service request
+s2s = S2SService()
+result = await s2s.authenticate(token_from_request)
+```
+
+Multiple comma-separated tokens are supported for rotation:
+
+```bash
+export S2S_AUTH_TOKEN="new-token,old-token"
+```
+
+With Starlette, use the `S2SAuthBackend` middleware:
+
+```python
+from tortoise_auth.integrations.starlette import S2SAuthBackend, require_s2s
+
+app.add_middleware(AuthenticationMiddleware, backend=S2SAuthBackend())
+
+@login_required
+async def internal_endpoint(request):
+    svc = require_s2s(request)  # returns ServiceIdentity
+    return JSONResponse({"caller": svc.display_name})
 ```
 
 ### Email Verification

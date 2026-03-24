@@ -4,7 +4,7 @@ An overview of what tortoise-auth ships today and where the project is headed.
 
 ---
 
-## Current Status (v0.2.0)
+## Current Status (v0.4.0)
 
 The following features are implemented and available in the current release:
 
@@ -32,6 +32,10 @@ The following features are implemented and available in the current release:
   setup → profile completion. Pluggable via the `OnboardingStep` Protocol.
   Built-in steps: `RegisterStep`, `VerifyEmailStep`, `SetupTOTPStep`,
   `ProfileCompletionStep`.
+- **Server-to-server authentication** -- `S2SService` for service-to-service
+  communication using env-var-based static bearer tokens with constant-time
+  comparison and comma-separated token rotation. Starlette `S2SAuthBackend`
+  included.
 
 ## Planned Features
 

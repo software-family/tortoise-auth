@@ -118,3 +118,7 @@ class OnboardingFlowCompleteError(OnboardingError):
 
     def __init__(self) -> None:
         super().__init__("Onboarding flow is already complete")
+
+
+class PasswordResetError(TortoiseAuthError):
+    """Raised when a password reset operation fails."""

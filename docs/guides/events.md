@@ -77,6 +77,8 @@ call `emit()` yourself for these -- the library handles it.
 | `onboarding_completed` | `OnboardingService._finalize()` | `handler(*, user, session_id: str)` | After the onboarding flow completes and tokens are issued. |
 | `onboarding_session_expired` | `OnboardingService._lookup_session()` | `handler(*, session_id: str, email: str)` | When an expired session is accessed. |
 | `verification_code_generated` | `VerifyEmailStep.execute()` | `handler(*, email: str, code: str)` | When a 6-digit verification code is generated. **You must listen to this event to send the email.** |
+| `s2s_auth_success` | `S2SService.authenticate()` | `handler(*, service_name: str \| None)` | After a successful S2S token verification. |
+| `s2s_auth_failed` | `S2SService.authenticate()` | `handler(*, service_name: str \| None)` | After a failed S2S token verification. |
 
 !!! warning
     `user_login_failed` passes its arguments as **keyword-only** arguments

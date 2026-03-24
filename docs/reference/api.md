@@ -54,6 +54,8 @@ set the values relevant to your deployment.
 | `onboarding_max_verification_attempts` | `int` | `5` | Max wrong codes before session invalidation. |
 | `onboarding_verification_code_ttl` | `int` | `600` | Verification code lifetime in seconds (10 minutes). |
 | `onboarding_invalidate_previous_sessions` | `bool` | `True` | Invalidate prior sessions for the same email on `start()`. |
+| `s2s_enabled` | `bool` | `False` | Enable S2S authentication. |
+| `s2s_token_env_var` | `str` | `"S2S_AUTH_TOKEN"` | Env var name holding the valid S2S token(s). |
 
 The default `password_validators` list is:
 
@@ -565,6 +567,72 @@ and refresh tokens for the user are immediately invalidated in the database.
 | Parameter | Type | Description |
 |---|---|---|
 | `user_id` | `str` | The string representation of the user's primary key. |
+
+---
+
+### `S2SService`
+
+```python
+class S2SService:
+    def __init__(self, config: AuthConfig | None = None) -> None: ...
+```
+
+Server-to-server authentication service. Verifies bearer tokens against a value
+stored in an environment variable. See the [S2S guide](../guides/s2s.md) for
+usage details.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `config` | `AuthConfig \| None` | `None` | Optional config. Falls back to `get_config()`. |
+
+#### `S2SService.authenticate`
+
+```python
+async def authenticate(
+    self, token: str, *, service_name: str | None = None
+) -> S2SAuthResult
+```
+
+Verify an S2S bearer token against the configured environment variable. Uses
+constant-time comparison to prevent timing attacks. Supports comma-separated
+tokens for rotation.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `token` | `str` | *(required)* | The bearer token to verify. |
+| `service_name` | `str \| None` | `None` | Optional caller identifier for auditing. |
+
+**Returns:** `S2SAuthResult` on success.
+
+**Raises:**
+
+| Exception | When |
+|---|---|
+| `ConfigurationError` | S2S not enabled or env var not set/empty. |
+| `AuthenticationError` | Token does not match any configured value. |
+
+**Events emitted:**
+
+| Event | When |
+|---|---|
+| `s2s_auth_success` | Token matched. |
+| `s2s_auth_failed` | Token did not match. |
+
+---
+
+### `S2SAuthResult`
+
+```python
+@dataclass(frozen=True, slots=True)
+class S2SAuthResult:
+    service_name: str | None = None
+```
+
+Result of a successful `S2SService.authenticate()` call.
+
+| Field | Type | Description |
+|---|---|---|
+| `service_name` | `str \| None` | The service name passed to `authenticate()`. |
 
 ---
 

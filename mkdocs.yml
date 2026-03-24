@@ -52,6 +52,7 @@ nav:
       - Password Validation: guides/password-validation.md
       - Signing: guides/signing.md
       - Events: guides/events.md
+      - S2S Authentication: guides/s2s.md
       - Rate Limiting: guides/rate-limiting.md
       - Onboarding Flow: guides/onboarding.md
       - Use Cases & Cookbook: guides/use-cases.md

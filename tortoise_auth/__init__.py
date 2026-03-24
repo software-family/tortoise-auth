@@ -1,6 +1,6 @@
 """Async authentication and user management for Tortoise ORM."""
 
-__version__ = "0.2.0"
+__version__ = "0.5.0"
 
 from tortoise_auth.config import AuthConfig, configure, get_config
 from tortoise_auth.events import emit, emitter, on
@@ -16,6 +16,7 @@ from tortoise_auth.exceptions import (
     OnboardingSessionExpiredError,
     OnboardingSessionInvalidError,
     OnboardingStepError,
+    PasswordResetError,
     RateLimitError,
     SignatureExpiredError,
     SigningError,
@@ -54,7 +55,7 @@ from tortoise_auth.onboarding.steps import (
 from tortoise_auth.rate_limit import RateLimitBackend, RateLimitResult
 from tortoise_auth.rate_limit.database import DatabaseRateLimitBackend
 from tortoise_auth.rate_limit.memory import InMemoryRateLimitBackend
-from tortoise_auth.services import AuthService
+from tortoise_auth.services import AuthService, PasswordResetService, S2SAuthResult, S2SService
 from tortoise_auth.signing import Signer, TimestampSigner, make_token, verify_token
 from tortoise_auth.tokens import AuthResult, TokenBackend, TokenPair, TokenPayload
 from tortoise_auth.tokens.database import DatabaseTokenBackend
@@ -92,12 +93,16 @@ __all__ = [
     "OnboardingStepError",
     "OnboardingStepStatus",
     "OutstandingToken",
+    "PasswordResetError",
+    "PasswordResetService",
     "ProfileCompletionStep",
     "RateLimitBackend",
     "RateLimitError",
     "RateLimitResult",
     "RefreshToken",
     "RegisterStep",
+    "S2SAuthResult",
+    "S2SService",
     "SetupTOTPStep",
     "SignatureExpiredError",
     "Signer",
