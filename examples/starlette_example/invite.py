@@ -32,9 +32,7 @@ async def main() -> int:
         description="Create an invitation and print a one-click onboarding link.",
     )
     parser.add_argument("email", help="Email address of the invitee")
-    parser.add_argument(
-        "role", nargs="?", default="", help="Optional role tag (free-form string)"
-    )
+    parser.add_argument("role", nargs="?", default="", help="Optional role tag (free-form string)")
     parser.add_argument(
         "--invited-by",
         default="",
@@ -68,7 +66,7 @@ async def main() -> int:
     print(f"Invitation created for: {args.email}")
     if args.role:
         print(f"Role:                   {args.role}")
-    print(f"Expires in:             24 hours")
+    print("Expires in:             24 hours")
     print()
     print("Send this link to the invitee:")
     print(f"  {link}")

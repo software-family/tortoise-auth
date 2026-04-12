@@ -1540,12 +1540,10 @@ dependencies = [
     { name = "pyotp" },
     { name = "qrcode", extra = ["pil"] },
     { name = "tortoise-orm" },
+    { name = "webauthn" },
 ]
 
 [package.optional-dependencies]
-passkey = [
-    { name = "webauthn" },
-]
 starlette = [
     { name = "starlette" },
     { name = "uvicorn" },
@@ -1576,9 +1574,9 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'starlette'", specifier = ">=0.52.1" },
     { name = "tortoise-orm", specifier = ">=1.0.0" },
     { name = "uvicorn", marker = "extra == 'starlette'", specifier = ">=0.44.0" },
-    { name = "webauthn", marker = "extra == 'passkey'", specifier = ">=2.0.0" },
+    { name = "webauthn", specifier = ">=2.0.0" },
 ]
-provides-extras = ["starlette", "passkey"]
+provides-extras = ["starlette"]
 
 [package.metadata.requires-dev]
 dev = [

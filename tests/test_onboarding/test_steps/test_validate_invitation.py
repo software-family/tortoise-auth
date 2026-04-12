@@ -113,9 +113,7 @@ class TestExecute:
         self, step: ValidateInvitationStep, context: StepContext
     ) -> None:
         svc = InvitationService(context.config)
-        token = await svc.create_invitation(
-            "admin@example.com", invited_by="1", role="editor"
-        )
+        token = await svc.create_invitation("admin@example.com", invited_by="1", role="editor")
 
         result = await step.execute(context, {"invitation_token": token})
         assert result.success is True

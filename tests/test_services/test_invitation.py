@@ -10,7 +10,6 @@ from tortoise_auth.exceptions import (
     BadSignatureError,
     InvitationAlreadyAcceptedError,
     InvitationError,
-    InvitationExpiredError,
     InvitationNotFoundError,
     InvitationRevokedError,
     SignatureExpiredError,

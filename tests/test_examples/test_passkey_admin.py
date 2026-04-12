@@ -155,9 +155,7 @@ class TestMandatoryRegisterPasskeyStep:
             "type": "public-key",
             "response": {"attestationObject": "x", "clientDataJSON": "y"},
         }
-        with patch(
-            "webauthn.verify_registration_response", return_value=fake_verification
-        ):
+        with patch("webauthn.verify_registration_response", return_value=fake_verification):
             complete = await step.execute(context2, {"credential": cred, "name": "k"})
 
         assert complete.success is True, complete.errors
@@ -182,9 +180,7 @@ class TestOnboardingPipeline:
         assert validated.step_result is not None
         assert validated.step_result.data["email"] == "carol@example.com"
 
-        registered = await example.onboarding_service.advance(
-            started.session_token, {}
-        )
+        registered = await example.onboarding_service.advance(started.session_token, {})
         assert registered.status == "in_progress"
         assert registered.current_step == "register_passkey"
 
@@ -256,8 +252,9 @@ class TestCookieAuthFlow:
         await user.save()
 
         # Register a passkey directly in the DB so authenticate can find it.
-        from tortoise_auth.models.passkey import PasskeyCredential
         from base64 import urlsafe_b64encode
+
+        from tortoise_auth.models.passkey import PasskeyCredential
 
         cred_id = b"\x01\x02\x03\x04\x05\x06\x07\x08"
         cred_id_b64 = urlsafe_b64encode(cred_id).rstrip(b"=").decode()
@@ -317,9 +314,7 @@ class TestCookieAuthFlow:
 
     async def test_login_sets_cookie_and_admin_is_accessible(self):
         transport = ASGITransport(example.app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await self._login_and_get_cookie(client)
 
             # Cookie must be set, httpOnly-like (starlette sets it httponly).
@@ -347,9 +342,7 @@ class TestCookieAuthFlow:
 
     async def test_logout_clears_cookie(self):
         transport = ASGITransport(example.app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             await self._login_and_get_cookie(client)
             assert example.ACCESS_COOKIE in client.cookies
 

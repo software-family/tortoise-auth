@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from tortoise_auth.config import AuthConfig
 from tortoise_auth.passkey.challenge import ChallengeData
 from tortoise_auth.passkey.challenge_database import DatabaseChallengeBackend

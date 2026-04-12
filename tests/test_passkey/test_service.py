@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from base64 import urlsafe_b64encode
 from dataclasses import dataclass
 from typing import Any
@@ -20,7 +19,6 @@ from tortoise_auth.exceptions import (
     PasskeyRegistrationError,
 )
 from tortoise_auth.models.passkey import PasskeyCredential
-from tortoise_auth.passkey.challenge import ChallengeData
 from tortoise_auth.passkey.challenge_memory import InMemoryChallengeBackend
 from tortoise_auth.passkey.service import PasskeyService
 from tortoise_auth.tokens import AuthResult
@@ -154,7 +152,7 @@ class TestPasskeyRegistration:
 
     @patch("webauthn.verify_registration_response")
     @patch("webauthn.generate_registration_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_registration_stores_credential(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
@@ -183,7 +181,7 @@ class TestPasskeyRegistration:
 
     @patch("webauthn.verify_registration_response")
     @patch("webauthn.generate_registration_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_registration_emits_event(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
@@ -218,7 +216,7 @@ class TestPasskeyRegistration:
 
     @patch("webauthn.verify_registration_response")
     @patch("webauthn.generate_registration_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_registration_challenge_user_mismatch(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
@@ -238,7 +236,7 @@ class TestPasskeyRegistration:
 
     @patch("webauthn.verify_registration_response")
     @patch("webauthn.generate_registration_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_registration_invalid_response(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
@@ -257,7 +255,7 @@ class TestPasskeyRegistration:
             )
 
     @patch("webauthn.generate_registration_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_begin_registration_excludes_existing(
         self, mock_to_json: MagicMock, mock_gen: MagicMock
     ):
@@ -296,7 +294,7 @@ class TestPasskeyRegistration:
 
     @patch("webauthn.verify_registration_response")
     @patch("webauthn.generate_registration_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_registration_json_string_credential(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
@@ -343,12 +341,12 @@ class TestPasskeyAuthentication:
         assert "challenge_id" in result
 
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_begin_authentication_with_user_limits_credentials(
         self, mock_to_json: MagicMock, mock_gen: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
-        user, cred = await self._setup_user_with_credential()
+        user, _ = await self._setup_user_with_credential()
         cfg = make_config()
         svc = PasskeyService(cfg)
         await svc.begin_authentication(user=user)
@@ -358,7 +356,7 @@ class TestPasskeyAuthentication:
         assert len(call_kwargs["allow_credentials"]) == 1
 
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_begin_authentication_without_user_discoverable(
         self, mock_to_json: MagicMock, mock_gen: MagicMock
     ):
@@ -371,13 +369,13 @@ class TestPasskeyAuthentication:
 
     @patch("webauthn.verify_authentication_response")
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_returns_auth_result(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
         mock_verify.return_value = FakeVerifiedAuthentication()
-        user, cred = await self._setup_user_with_credential()
+        user, _ = await self._setup_user_with_credential()
         cfg = make_config()
         svc = PasskeyService(cfg)
 
@@ -394,13 +392,13 @@ class TestPasskeyAuthentication:
 
     @patch("webauthn.verify_authentication_response")
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_updates_sign_count(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
         mock_verify.return_value = FakeVerifiedAuthentication(new_sign_count=5)
-        user, cred = await self._setup_user_with_credential()
+        _, cred = await self._setup_user_with_credential()
         cfg = make_config()
         svc = PasskeyService(cfg)
 
@@ -415,13 +413,13 @@ class TestPasskeyAuthentication:
 
     @patch("webauthn.verify_authentication_response")
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_updates_last_used(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
         mock_verify.return_value = FakeVerifiedAuthentication()
-        user, cred = await self._setup_user_with_credential()
+        _, cred = await self._setup_user_with_credential()
         assert cred.last_used_at is None
         cfg = make_config()
         svc = PasskeyService(cfg)
@@ -437,13 +435,13 @@ class TestPasskeyAuthentication:
 
     @patch("webauthn.verify_authentication_response")
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_updates_last_login(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
         mock_verify.return_value = FakeVerifiedAuthentication()
-        user, cred = await self._setup_user_with_credential()
+        user, _ = await self._setup_user_with_credential()
         assert user.last_login is None
         cfg = make_config()
         svc = PasskeyService(cfg)
@@ -459,13 +457,13 @@ class TestPasskeyAuthentication:
 
     @patch("webauthn.verify_authentication_response")
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_emits_event(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
         mock_verify.return_value = FakeVerifiedAuthentication()
-        user, cred = await self._setup_user_with_credential()
+        user, _ = await self._setup_user_with_credential()
         cfg = make_config()
         svc = PasskeyService(cfg)
         events: list[dict[str, Any]] = []
@@ -493,7 +491,7 @@ class TestPasskeyAuthentication:
             )
 
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_unknown_credential(
         self, mock_to_json: MagicMock, mock_gen: MagicMock
     ):
@@ -509,13 +507,13 @@ class TestPasskeyAuthentication:
 
     @patch("webauthn.verify_authentication_response")
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_inactive_user(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
         mock_verify.return_value = FakeVerifiedAuthentication()
-        user, cred = await self._setup_user_with_credential()
+        user, _ = await self._setup_user_with_credential()
         user.is_active = False
         await user.save(update_fields=["is_active"])
         cfg = make_config()
@@ -530,13 +528,13 @@ class TestPasskeyAuthentication:
 
     @patch("webauthn.verify_authentication_response")
     @patch("webauthn.generate_authentication_options")
-    @patch("webauthn.options_to_json", return_value='{}')
+    @patch("webauthn.options_to_json", return_value="{}")
     async def test_complete_authentication_invalid_response(
         self, mock_to_json: MagicMock, mock_gen: MagicMock, mock_verify: MagicMock
     ):
         mock_gen.return_value = _fake_authentication_options()
         mock_verify.side_effect = Exception("Bad signature")
-        user, cred = await self._setup_user_with_credential()
+        await self._setup_user_with_credential()
         cfg = make_config()
         svc = PasskeyService(cfg)
 

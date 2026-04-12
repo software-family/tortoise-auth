@@ -242,14 +242,10 @@ class PasskeyService:
                 expected_challenge=challenge_data.challenge,
                 expected_rp_id=effective_rp_id,
                 expected_origin=effective_origin,
-                require_user_verification=(
-                    self.config.passkey_user_verification == "required"
-                ),
+                require_user_verification=(self.config.passkey_user_verification == "required"),
             )
         except Exception as exc:
-            await emit(
-                "passkey_registration_failed", user=user, reason=str(exc)
-            )
+            await emit("passkey_registration_failed", user=user, reason=str(exc))
             raise PasskeyRegistrationError(f"Registration verification failed: {exc}") from exc
 
         credential_id_bytes = verification.credential_id
@@ -408,9 +404,7 @@ class PasskeyService:
                 expected_origin=effective_origin,
                 credential_public_key=bytes(stored.public_key),
                 credential_current_sign_count=stored.sign_count,
-                require_user_verification=(
-                    self.config.passkey_user_verification == "required"
-                ),
+                require_user_verification=(self.config.passkey_user_verification == "required"),
             )
         except Exception as exc:
             await emit(
@@ -418,9 +412,7 @@ class PasskeyService:
                 credential_id=raw_id_b64,
                 reason=str(exc),
             )
-            raise PasskeyAuthenticationError(
-                f"Authentication verification failed: {exc}"
-            ) from exc
+            raise PasskeyAuthenticationError(f"Authentication verification failed: {exc}") from exc
 
         # Update credential state
         stored.sign_count = verification.new_sign_count

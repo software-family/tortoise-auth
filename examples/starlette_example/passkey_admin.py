@@ -18,15 +18,14 @@ Then create the first invitation (bootstrap admin) with:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from tortoise import Tortoise, fields
 from starlette.applications import Starlette
 from starlette.authentication import AuthCredentials
 from starlette.middleware.authentication import AuthenticationMiddleware
-from starlette.requests import HTTPConnection, Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
+from tortoise import Tortoise, fields
 
 from tortoise_auth import (
     AuthConfig,
@@ -48,6 +47,9 @@ from tortoise_auth.integrations.starlette import (
 from tortoise_auth.models import AbstractUser
 from tortoise_auth.onboarding import ClientHint, StepContext, StepResult
 from tortoise_auth.tokens.jwt import JWTBackend
+
+if TYPE_CHECKING:
+    from starlette.requests import HTTPConnection, Request
 
 
 # ---------------------------------------------------------------------------
@@ -449,40 +451,50 @@ async def onboarding_start(request: Request) -> JSONResponse:
     """POST /onboarding/start  { "email": "..." }"""
     body = await request.json()
     result = await onboarding_service.start(body.get("email", ""))
-    return JSONResponse({
-        "session_token": result.session_token,
-        "current_step": result.current_step,
-        "status": result.status,
-    })
+    return JSONResponse(
+        {
+            "session_token": result.session_token,
+            "current_step": result.current_step,
+            "status": result.status,
+        }
+    )
 
 
 async def onboarding_advance(request: Request) -> JSONResponse:
     """POST /onboarding/advance  { "session_token": "...", "data": {...} }"""
     body = await request.json()
     result = await onboarding_service.advance(body["session_token"], body.get("data", {}))
-    response = JSONResponse({
-        "session_token": body["session_token"],
-        "current_step": result.current_step,
-        "status": result.status,
-        "step_result": {
-            "success": result.step_result.success,
-            "errors": result.step_result.errors,
-            "data": result.step_result.data,
-        } if result.step_result else None,
-        "auth_result": {
-            "access_token": result.auth_result.access_token,
-            "refresh_token": result.auth_result.refresh_token,
-        } if result.auth_result else None,
-        "client_hint": {
-            "step_name": result.client_hint.step_name,
-            "title": result.client_hint.title,
-            "fields": [
-                {"name": f.name, "type": f.field_type, "required": f.required}
-                for f in result.client_hint.fields
-            ],
-            "extra": result.client_hint.extra,
-        } if result.client_hint else None,
-    })
+    response = JSONResponse(
+        {
+            "session_token": body["session_token"],
+            "current_step": result.current_step,
+            "status": result.status,
+            "step_result": {
+                "success": result.step_result.success,
+                "errors": result.step_result.errors,
+                "data": result.step_result.data,
+            }
+            if result.step_result
+            else None,
+            "auth_result": {
+                "access_token": result.auth_result.access_token,
+                "refresh_token": result.auth_result.refresh_token,
+            }
+            if result.auth_result
+            else None,
+            "client_hint": {
+                "step_name": result.client_hint.step_name,
+                "title": result.client_hint.title,
+                "fields": [
+                    {"name": f.name, "type": f.field_type, "required": f.required}
+                    for f in result.client_hint.fields
+                ],
+                "extra": result.client_hint.extra,
+            }
+            if result.client_hint
+            else None,
+        }
+    )
     if result.auth_result is not None:
         _set_access_cookie(response, result.auth_result.access_token)
     return response
@@ -496,16 +508,18 @@ async def invitation_list(request: Request) -> JSONResponse:
     """GET /admin/invitations — list pending invitations."""
     require_auth(request)
     pending = await invitation_service.list_pending()
-    return JSONResponse([
-        {
-            "id": inv.id,
-            "email": inv.email,
-            "role": inv.role,
-            "created_at": str(inv.created_at),
-            "expires_at": str(inv.expires_at),
-        }
-        for inv in pending
-    ])
+    return JSONResponse(
+        [
+            {
+                "id": inv.id,
+                "email": inv.email,
+                "role": inv.role,
+                "created_at": str(inv.created_at),
+                "expires_at": str(inv.expires_at),
+            }
+            for inv in pending
+        ]
+    )
 
 
 @login_required
@@ -537,28 +551,32 @@ async def passkey_register_complete(request: Request) -> JSONResponse:
         challenge_id=body["challenge_id"],
         name=body.get("name", ""),
     )
-    return JSONResponse({
-        "id": passkey.credential_id_b64,
-        "name": passkey.name,
-        "created_at": str(passkey.created_at),
-    })
+    return JSONResponse(
+        {
+            "id": passkey.credential_id_b64,
+            "name": passkey.name,
+            "created_at": str(passkey.created_at),
+        }
+    )
 
 
 @login_required
 async def passkey_list(request: Request) -> JSONResponse:
     user = require_auth(request)
     creds = await passkey_service.list_credentials(user)
-    return JSONResponse([
-        {
-            "id": c.credential_id_b64,
-            "name": c.name,
-            "device_type": c.credential_device_type,
-            "backed_up": c.credential_backed_up,
-            "created_at": str(c.created_at),
-            "last_used_at": str(c.last_used_at) if c.last_used_at else None,
-        }
-        for c in creds
-    ])
+    return JSONResponse(
+        [
+            {
+                "id": c.credential_id_b64,
+                "name": c.name,
+                "device_type": c.credential_device_type,
+                "backed_up": c.credential_backed_up,
+                "created_at": str(c.created_at),
+                "last_used_at": str(c.last_used_at) if c.last_used_at else None,
+            }
+            for c in creds
+        ]
+    )
 
 
 @login_required
@@ -568,9 +586,7 @@ async def passkey_delete(request: Request) -> JSONResponse:
     # Guard: refuse to delete the last passkey — user would be locked out
     creds = await passkey_service.list_credentials(user)
     if len(creds) <= 1:
-        return JSONResponse(
-            {"error": "Cannot delete your last passkey"}, status_code=400
-        )
+        return JSONResponse({"error": "Cannot delete your last passkey"}, status_code=400)
     await passkey_service.delete_credential(user, credential_id)
     return JSONResponse({"deleted": True})
 
@@ -589,11 +605,13 @@ async def passkey_auth_complete(request: Request) -> JSONResponse:
         credential=body["credential"],
         challenge_id=body["challenge_id"],
     )
-    response = JSONResponse({
-        "access_token": result.access_token,
-        "refresh_token": result.refresh_token,
-        "user_email": result.user.email,
-    })
+    response = JSONResponse(
+        {
+            "access_token": result.access_token,
+            "refresh_token": result.refresh_token,
+            "user_email": result.user.email,
+        }
+    )
     _set_access_cookie(response, result.access_token)
     return response
 
@@ -619,7 +637,7 @@ async def admin_dashboard(request: Request) -> HTMLResponse:
         passkey_items = "".join(
             f"<li>{c.name or 'Unnamed'} — {c.credential_device_type} "
             f"(last used: {c.last_used_at or 'never'})"
-            f" <button onclick=\"deletePasskey({q}{c.credential_id_b64}{q})\">Delete</button></li>"
+            f' <button onclick="deletePasskey({q}{c.credential_id_b64}{q})">Delete</button></li>'
             for c in creds
         )
     else:
@@ -630,7 +648,7 @@ async def admin_dashboard(request: Request) -> HTMLResponse:
             f"<li>{inv.email}"
             f"{' (' + inv.role + ')' if inv.role else ''}"
             f" — expires {inv.expires_at:%Y-%m-%d %H:%M}"
-            f" <button onclick=\"revokeInvitation({inv.id})\">Revoke</button></li>"
+            f' <button onclick="revokeInvitation({inv.id})">Revoke</button></li>'
             for inv in pending_invitations
         )
     else:
