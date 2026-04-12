@@ -84,6 +84,20 @@ class AuthConfig:
     s2s_enabled: bool = False
     s2s_token_env_var: str = "S2S_AUTH_TOKEN"
 
+    # Passkey / WebAuthn
+    passkey_challenge_ttl: int = 300  # 5 minutes
+    passkey_rp_id: str = ""
+    passkey_rp_name: str = ""
+    passkey_origin: str | list[str] = ""
+    passkey_user_verification: str = "preferred"  # "required", "preferred", "discouraged"
+    passkey_attestation: str = "none"  # "none", "indirect", "direct", "enterprise"
+    passkey_authenticator_attachment: str = ""  # "", "platform", "cross-platform"
+
+    # Invitation settings
+    invitation_token_lifetime: int = 86_400  # 24 hours
+    invitation_require: bool = False
+    invitation_max_pending: int = 0  # 0 = unlimited
+
     def validate(self) -> None:
         """Validate config. Raises ConfigurationError."""
         if self.access_token_lifetime <= 0:
@@ -110,6 +124,22 @@ class AuthConfig:
             raise ConfigurationError("password_reset_rate_limit_window must be positive")
         if self.s2s_enabled and not self.s2s_token_env_var:
             raise ConfigurationError("s2s_token_env_var must be non-empty when s2s_enabled is True")
+        if self.passkey_challenge_ttl <= 0:
+            raise ConfigurationError("passkey_challenge_ttl must be positive")
+        if self.passkey_user_verification not in ("required", "preferred", "discouraged"):
+            raise ConfigurationError(
+                "passkey_user_verification must be 'required', 'preferred', or 'discouraged'"
+            )
+        if self.passkey_attestation not in ("none", "indirect", "direct", "enterprise"):
+            raise ConfigurationError(
+                "passkey_attestation must be 'none', 'indirect', 'direct', or 'enterprise'"
+            )
+        if self.passkey_authenticator_attachment not in ("", "platform", "cross-platform"):
+            raise ConfigurationError(
+                "passkey_authenticator_attachment must be '', 'platform', or 'cross-platform'"
+            )
+        if self.invitation_token_lifetime <= 0:
+            raise ConfigurationError("invitation_token_lifetime must be positive")
 
     @property
     def effective_signing_secret(self) -> str:

@@ -9,6 +9,11 @@ from tortoise_auth.exceptions import (
     BadSignatureError,
     ConfigurationError,
     EventError,
+    InvitationAlreadyAcceptedError,
+    InvitationError,
+    InvitationExpiredError,
+    InvitationNotFoundError,
+    InvitationRevokedError,
     InvalidHashError,
     InvalidPasswordError,
     OnboardingError,
@@ -16,6 +21,9 @@ from tortoise_auth.exceptions import (
     OnboardingSessionExpiredError,
     OnboardingSessionInvalidError,
     OnboardingStepError,
+    PasskeyAuthenticationError,
+    PasskeyError,
+    PasskeyRegistrationError,
     PasswordResetError,
     RateLimitError,
     SignatureExpiredError,
@@ -30,10 +38,13 @@ from tortoise_auth.models import (
     AbstractUser,
     AccessToken,
     BlacklistedToken,
+    Invitation,
     LoginAttempt,
     OnboardingSession,
     OutstandingToken,
+    PasskeyCredential,
     RefreshToken,
+    WebAuthnChallenge,
 )
 from tortoise_auth.onboarding import (
     ClientHint,
@@ -48,14 +59,25 @@ from tortoise_auth.onboarding.flow import OnboardingFlow
 from tortoise_auth.onboarding.service import OnboardingService
 from tortoise_auth.onboarding.steps import (
     ProfileCompletionStep,
+    RegisterPasskeyStep,
     RegisterStep,
     SetupTOTPStep,
+    ValidateInvitationStep,
     VerifyEmailStep,
 )
+from tortoise_auth.passkey import ChallengeBackend, ChallengeData, PasskeyService
+from tortoise_auth.passkey.challenge_database import DatabaseChallengeBackend
+from tortoise_auth.passkey.challenge_memory import InMemoryChallengeBackend
 from tortoise_auth.rate_limit import RateLimitBackend, RateLimitResult
 from tortoise_auth.rate_limit.database import DatabaseRateLimitBackend
 from tortoise_auth.rate_limit.memory import InMemoryRateLimitBackend
-from tortoise_auth.services import AuthService, PasswordResetService, S2SAuthResult, S2SService
+from tortoise_auth.services import (
+    AuthService,
+    InvitationService,
+    PasswordResetService,
+    S2SAuthResult,
+    S2SService,
+)
 from tortoise_auth.signing import Signer, TimestampSigner, make_token, verify_token
 from tortoise_auth.tokens import AuthResult, TokenBackend, TokenPair, TokenPayload
 from tortoise_auth.tokens.database import DatabaseTokenBackend
@@ -70,12 +92,23 @@ __all__ = [
     "AuthenticationError",
     "BadSignatureError",
     "BlacklistedToken",
+    "ChallengeBackend",
+    "ChallengeData",
     "ClientHint",
     "ConfigurationError",
+    "DatabaseChallengeBackend",
     "DatabaseRateLimitBackend",
     "DatabaseTokenBackend",
     "EventError",
     "FieldHint",
+    "InMemoryChallengeBackend",
+    "Invitation",
+    "InvitationAlreadyAcceptedError",
+    "InvitationError",
+    "InvitationExpiredError",
+    "InvitationNotFoundError",
+    "InvitationRevokedError",
+    "InvitationService",
     "InMemoryRateLimitBackend",
     "InvalidHashError",
     "InvalidPasswordError",
@@ -93,6 +126,11 @@ __all__ = [
     "OnboardingStepError",
     "OnboardingStepStatus",
     "OutstandingToken",
+    "PasskeyAuthenticationError",
+    "PasskeyCredential",
+    "PasskeyError",
+    "PasskeyRegistrationError",
+    "PasskeyService",
     "PasswordResetError",
     "PasswordResetService",
     "ProfileCompletionStep",
@@ -100,6 +138,7 @@ __all__ = [
     "RateLimitError",
     "RateLimitResult",
     "RefreshToken",
+    "RegisterPasskeyStep",
     "RegisterStep",
     "S2SAuthResult",
     "S2SService",
@@ -118,7 +157,9 @@ __all__ = [
     "TokenPayload",
     "TokenRevokedError",
     "TortoiseAuthError",
+    "ValidateInvitationStep",
     "VerifyEmailStep",
+    "WebAuthnChallenge",
     "configure",
     "emit",
     "emitter",

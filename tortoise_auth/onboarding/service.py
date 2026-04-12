@@ -359,6 +359,14 @@ class OnboardingService:
         pipeline = json.loads(session.pipeline)
         step_state: dict[str, str] = json.loads(session.step_state)
 
+        # Accept invitation if one was validated during onboarding
+        invitation_token = step_data.get("invitation_token")
+        if invitation_token and self.config.invitation_require:
+            from tortoise_auth.services.invitation import InvitationService
+
+            inv_service = InvitationService(self.config)
+            await inv_service.accept_invitation(invitation_token)
+
         auth_result: AuthResult | None = None
         if user_id:
             from tortoise_auth.services.auth import AuthService

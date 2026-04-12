@@ -122,3 +122,35 @@ class OnboardingFlowCompleteError(OnboardingError):
 
 class PasswordResetError(TortoiseAuthError):
     """Raised when a password reset operation fails."""
+
+
+class PasskeyError(TortoiseAuthError):
+    """Base exception for passkey/WebAuthn errors."""
+
+
+class PasskeyRegistrationError(PasskeyError):
+    """Raised when passkey registration fails."""
+
+
+class PasskeyAuthenticationError(PasskeyError):
+    """Raised when passkey authentication fails."""
+
+
+class InvitationError(TortoiseAuthError):
+    """Base exception for invitation errors."""
+
+
+class InvitationNotFoundError(InvitationError):
+    """Raised when an invitation token is not found."""
+
+
+class InvitationExpiredError(InvitationError):
+    """Raised when an invitation token has expired."""
+
+
+class InvitationAlreadyAcceptedError(InvitationError):
+    """Raised when an invitation has already been used."""
+
+
+class InvitationRevokedError(InvitationError):
+    """Raised when a revoked invitation is presented."""

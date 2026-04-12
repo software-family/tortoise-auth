@@ -5,7 +5,7 @@ description = "Async authentication and user management for Tortoise ORM. Framew
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "Elie Terrien" }]
-keywords = ["tortoise-orm", "authentication", "auth", "async", "user-management", "totp", "2fa", "api-keys"]
+keywords = ["tortoise-orm", "authentication", "auth", "async", "user-management", "totp", "2fa", "api-keys", "webauthn", "passkey"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: AsyncIO",
@@ -28,7 +28,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-starlette = ["starlette>=0.52.1"]
+starlette = ["starlette>=0.52.1", "uvicorn>=0.44.0"]
+passkey = ["webauthn>=2.0.0"]
 
 [project.urls]
 Homepage = "https://github.com/elie/tortoise-auth"
@@ -121,4 +122,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "starlette.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "webauthn.*"
 ignore_missing_imports = true
